@@ -3,7 +3,7 @@ from django.urls import path, include
 from core.views import (
     signup, dashboard, user_login, user_logout, select_role,
     project_list, project_create, project_detail, project_edit, project_delete,
-    task_create, task_edit
+    task_create, task_edit, my_tasks, update_task_status
 )
 from project_manager_agent.views import (
     ai_agents_test, test_task_prioritization, test_knowledge_qa, test_project_pilot, test_timeline_gantt,
@@ -29,6 +29,8 @@ urlpatterns = [
     path('tasks/create/', task_create, name='task_create'),
     path('tasks/create/<int:project_id>/', task_create, name='task_create_for_project'),
     path('tasks/<int:task_id>/edit/', task_edit, name='task_edit'),
+    path('my-tasks/', my_tasks, name='my_tasks'),
+    path('tasks/<int:task_id>/update-status/', update_task_status, name='update_task_status'),
     
     # AI Agents
     path('ai-agents/', ai_agents_test, name='ai_agents_test'),

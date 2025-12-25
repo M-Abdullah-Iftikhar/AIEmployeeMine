@@ -63,6 +63,7 @@ class Task(models.Model):
     due_date = models.DateTimeField(null=True, blank=True)
     estimated_hours = models.FloatField(null=True, blank=True)
     actual_hours = models.FloatField(null=True, blank=True)
+    progress_percentage = models.IntegerField(null=True, blank=True, default=None, help_text="Manual progress percentage (0-100)")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     completed_at = models.DateTimeField(null=True, blank=True)
@@ -250,6 +251,7 @@ class UserProfile(models.Model):
     ROLE_CHOICES = [
         ('project_manager', 'Project Manager'),
         ('team_member', 'Team Member'),
+        ('developer', 'Developer'),
         ('viewer', 'Viewer'),
         ('recruitment_agent', 'Recruitment Agent'),
         ('marketing_agent', 'Marketing Agent'),
@@ -274,6 +276,10 @@ class UserProfile(models.Model):
     def is_marketing_agent(self):
         """Check if user is a marketing agent"""
         return self.role == 'marketing_agent'
+    
+    def is_developer(self):
+        """Check if user is a developer"""
+        return self.role == 'developer'
 
 
 @receiver(post_save, sender=User)
