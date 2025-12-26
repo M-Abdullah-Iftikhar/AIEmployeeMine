@@ -405,13 +405,27 @@ def test_knowledge_qa(request):
                             except (ValueError, TypeError):
                                 pass
                         
+                        # Handle new fields from action_data
+                        project_manager_id = action_data.get('project_manager_id')
+                        industry_id = action_data.get('industry_id')
+                        project_type = action_data.get('project_type')
+                        budget_min = action_data.get('budget_min')
+                        budget_max = action_data.get('budget_max')
+                        deadline = action_data.get('deadline') or end_date
+                        
                         project = Project.objects.create(
                             name=action_data.get('project_name', 'New Project'),
                             description=action_data.get('project_description', ''),
                             owner=request.user,
                             status=action_data.get('project_status', 'planning'),
                             priority=action_data.get('project_priority', 'medium'),
-                            end_date=end_date
+                            end_date=end_date,
+                            project_manager_id=project_manager_id if project_manager_id else None,
+                            industry_id=industry_id if industry_id else None,
+                            project_type=project_type if project_type else 'web_app',
+                            budget_min=budget_min if budget_min else None,
+                            budget_max=budget_max if budget_max else None,
+                            deadline=deadline
                         )
                         
                         created_project_id = project.id
@@ -519,6 +533,7 @@ def test_knowledge_qa(request):
                             # Update priority if specified
                             if 'priority' in updates:
                                 new_priority = updates['priority']
+                                # Note: Task model only supports 'low', 'medium', 'high' (not 'urgent')
                                 if new_priority in ['low', 'medium', 'high']:
                                     task_to_update.priority = new_priority
                                     updated_fields.append(f"Priority: {new_priority}")
@@ -781,13 +796,27 @@ def test_project_pilot(request):
                             except (ValueError, TypeError):
                                 pass
                         
+                        # Handle new fields from action_data
+                        project_manager_id = action_data.get('project_manager_id')
+                        industry_id = action_data.get('industry_id')
+                        project_type = action_data.get('project_type')
+                        budget_min = action_data.get('budget_min')
+                        budget_max = action_data.get('budget_max')
+                        deadline = action_data.get('deadline') or end_date
+                        
                         project = Project.objects.create(
                             name=action_data.get('project_name', 'New Project'),
                             description=action_data.get('project_description', ''),
                             owner=request.user,
                             status=action_data.get('project_status', 'planning'),
                             priority=action_data.get('project_priority', 'medium'),
-                            end_date=end_date
+                            end_date=end_date,
+                            project_manager_id=project_manager_id if project_manager_id else None,
+                            industry_id=industry_id if industry_id else None,
+                            project_type=project_type if project_type else 'web_app',
+                            budget_min=budget_min if budget_min else None,
+                            budget_max=budget_max if budget_max else None,
+                            deadline=deadline
                         )
                         
                         created_project_id = project.id
@@ -1005,6 +1034,7 @@ def test_project_pilot(request):
                             # Update priority if specified
                             if 'priority' in updates:
                                 new_priority = updates['priority']
+                                # Note: Task model only supports 'low', 'medium', 'high' (not 'urgent')
                                 if new_priority in ['low', 'medium', 'high']:
                                     task_to_update.priority = new_priority
                                     updated_fields.append(f"Priority: {new_priority}")

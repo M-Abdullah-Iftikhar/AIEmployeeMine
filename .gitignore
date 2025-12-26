@@ -82,7 +82,6 @@ celerybeat.pid
 cython_debug/
 
 # Django
-*.log
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
@@ -90,6 +89,17 @@ db.sqlite3-journal
 /media/
 /mediafiles/
 /static/
+
+# Logs and log files
+logs/
+**/logs/
+*.log
+*.log.*
+*.jsonl
+*.log.jsonl
+*.log.txt
+nohup.out
+lsof.out
 
 # IDE
 .vscode/

@@ -8,12 +8,26 @@ class JobDescription(models.Model):
     Model to store job descriptions for recruitment positions.
     Recruiters can manage multiple job descriptions for different positions.
     """
+    TYPE_CHOICES = [
+        ('Full-time', 'Full-time'),
+        ('Part-time', 'Part-time'),
+        ('Contract', 'Contract'),
+        ('Internship', 'Internship'),
+    ]
+    
     title = models.CharField(max_length=255, help_text="Job title/position name")
     description = models.TextField(help_text="Full job description text")
     keywords_json = models.TextField(null=True, blank=True, help_text="Parsed keywords and requirements from JobDescriptionParserAgent (JSON)")
     
+    # Additional fields from payPerProject
+    location = models.CharField(max_length=255, blank=True, null=True)
+    department = models.CharField(max_length=255, blank=True, null=True)
+    type = models.CharField(max_length=50, choices=TYPE_CHOICES, default='Full-time')
+    requirements = models.TextField(blank=True, null=True, help_text="Job requirements")
+    
     # Metadata
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_job_descriptions')
+    company = models.ForeignKey('core.Company', on_delete=models.SET_NULL, null=True, blank=True, related_name='job_positions')
     is_active = models.BooleanField(default=True, help_text="Whether this job description is currently active/being used")
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
@@ -126,3 +140,32 @@ class Interview(models.Model):
     
     def __str__(self):
         return f"Interview: {self.candidate_name} - {self.job_role} ({self.status})"
+
+
+class CareerApplication(models.Model):
+    """Job applications - maps to ppp_career_applications"""
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('reviewing', 'Reviewing'),
+        ('interview', 'Interview'),
+        ('accepted', 'Accepted'),
+        ('rejected', 'Rejected'),
+    ]
+    
+    position_title = models.CharField(max_length=255)
+    applicant_name = models.CharField(max_length=255)
+    email = models.EmailField()
+    phone = models.CharField(max_length=20, blank=True, null=True)
+    resume_path = models.CharField(max_length=500, blank=True, null=True)
+    cover_letter = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='pending')
+    position = models.ForeignKey(JobDescription, on_delete=models.SET_NULL, null=True, blank=True, related_name='career_applications')
+    application_token = models.CharField(max_length=255, unique=True, blank=True, null=True)
+    company = models.ForeignKey('core.Company', on_delete=models.SET_NULL, null=True, blank=True, related_name='career_applications')
+    created_at = models.DateTimeField(default=timezone.now)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.applicant_name} - {self.position_title}"

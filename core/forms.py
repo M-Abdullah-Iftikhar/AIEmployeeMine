@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
-from .models import Project, Task, UserProfile
+from .models import Project, Task, UserProfile, Industry
 
 
 class ProjectForm(forms.ModelForm):
@@ -9,7 +9,8 @@ class ProjectForm(forms.ModelForm):
     
     class Meta:
         model = Project
-        fields = ['name', 'description', 'status', 'priority', 'start_date', 'end_date']
+        fields = ['name', 'description', 'status', 'priority', 'start_date', 'end_date', 
+                  'project_manager', 'industry', 'project_type', 'budget_min', 'budget_max', 'deadline']
         widgets = {
             'name': forms.TextInput(attrs={
                 'class': 'form-group input',
@@ -34,7 +35,52 @@ class ProjectForm(forms.ModelForm):
                 'class': 'form-group input',
                 'type': 'date'
             }),
+            'project_manager': forms.Select(attrs={
+                'class': 'form-group input'
+            }),
+            'industry': forms.Select(attrs={
+                'class': 'form-group input'
+            }),
+            'project_type': forms.Select(attrs={
+                'class': 'form-group input'
+            }),
+            'budget_min': forms.NumberInput(attrs={
+                'class': 'form-group input',
+                'step': '0.01',
+                'placeholder': 'Minimum budget'
+            }),
+            'budget_max': forms.NumberInput(attrs={
+                'class': 'form-group input',
+                'step': '0.01',
+                'placeholder': 'Maximum budget'
+            }),
+            'deadline': forms.DateInput(attrs={
+                'class': 'form-group input',
+                'type': 'date'
+            }),
         }
+    
+    def __init__(self, *args, **kwargs):
+        user = kwargs.pop('user', None)
+        super().__init__(*args, **kwargs)
+        
+        # Filter project_manager to show users (or limit to project managers if needed)
+        if user:
+            # You can customize this queryset based on your needs
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            self.fields['project_manager'].queryset = User.objects.all()
+        
+        # Industry queryset - show all industries
+        self.fields['industry'].queryset = Industry.objects.all()
+        
+        # Make new fields optional (they're already nullable in model, but ensure empty is allowed)
+        self.fields['project_manager'].required = False
+        self.fields['industry'].required = False
+        self.fields['project_type'].required = False
+        self.fields['budget_min'].required = False
+        self.fields['budget_max'].required = False
+        self.fields['deadline'].required = False
 
 
 class TaskForm(forms.ModelForm):

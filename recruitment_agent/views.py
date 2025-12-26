@@ -811,12 +811,24 @@ def create_job_description(request):
                 log_service.log_error("job_description_keyword_parsing_failed", {"error": str(exc)})
                 # Continue without keywords if parsing fails
         
+        # Extract new fields from request
+        location = request.POST.get('location', '').strip() or None
+        department = request.POST.get('department', '').strip() or None
+        job_type = request.POST.get('type', '').strip() or 'Full-time'
+        requirements = request.POST.get('requirements', '').strip() or None
+        company_id = request.POST.get('company_id', '').strip() or None
+        
         job_desc = JobDescription.objects.create(
             title=title,
             description=description,
             keywords_json=keywords_json,
             created_by=request.user,
             is_active=True,
+            location=location,
+            department=department,
+            type=job_type,
+            requirements=requirements,
+            company_id=company_id if company_id else None,
         )
         
         return JsonResponse({
