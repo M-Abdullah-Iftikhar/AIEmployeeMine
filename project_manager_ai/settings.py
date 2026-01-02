@@ -276,7 +276,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'recruitment_agent.middleware.AutoInterviewFollowupMiddleware',  # Auto follow-up email checking
 ]
 
 ROOT_URLCONF = 'project_manager_ai.urls'
