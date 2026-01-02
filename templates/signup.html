@@ -29,6 +29,75 @@
                 {% endif %}
             </div>
             <div class="form-group">
+                <label for="{{ form.email.id_for_label }}">Email</label>
+                <input type="email" 
+                       name="{{ form.email.name }}" 
+                       id="{{ form.email.id_for_label }}"
+                       placeholder="Enter your email address"
+                       required
+                       autocomplete="email">
+                {% if form.email.errors %}
+                    <ul style="color: var(--error-color); margin-top: 0.5rem; font-size: 0.85rem;">
+                        {% for error in form.email.errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+                {% if form.email.help_text %}
+                    <span class="helptext">{{ form.email.help_text }}</span>
+                {% endif %}
+            </div>
+            <div class="form-group">
+                <label for="{{ form.first_name.id_for_label }}">First Name</label>
+                <input type="text" 
+                       name="{{ form.first_name.name }}" 
+                       id="{{ form.first_name.id_for_label }}"
+                       placeholder="Enter your first name"
+                       required
+                       autocomplete="given-name">
+                {% if form.first_name.errors %}
+                    <ul style="color: var(--error-color); margin-top: 0.5rem; font-size: 0.85rem;">
+                        {% for error in form.first_name.errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+            <div class="form-group">
+                <label for="{{ form.last_name.id_for_label }}">Last Name</label>
+                <input type="text" 
+                       name="{{ form.last_name.name }}" 
+                       id="{{ form.last_name.id_for_label }}"
+                       placeholder="Enter your last name"
+                       required
+                       autocomplete="family-name">
+                {% if form.last_name.errors %}
+                    <ul style="color: var(--error-color); margin-top: 0.5rem; font-size: 0.85rem;">
+                        {% for error in form.last_name.errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+            <div class="form-group">
+                <label for="{{ form.phone_number.id_for_label }}">Phone Number <span style="color: var(--text-secondary); font-weight: normal;">(Optional)</span></label>
+                <input type="tel" 
+                       name="{{ form.phone_number.name }}" 
+                       id="{{ form.phone_number.id_for_label }}"
+                       placeholder="Enter your phone number (e.g., +1 234 567 8900)"
+                       autocomplete="tel">
+                {% if form.phone_number.errors %}
+                    <ul style="color: var(--error-color); margin-top: 0.5rem; font-size: 0.85rem;">
+                        {% for error in form.phone_number.errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+                {% if form.phone_number.help_text %}
+                    <span class="helptext">{{ form.phone_number.help_text }}</span>
+                {% endif %}
+            </div>
+            <div class="form-group">
                 <label for="{{ form.password1.id_for_label }}">Password</label>
                 <input type="password" 
                        name="{{ form.password1.name }}" 
