@@ -261,6 +261,9 @@ INSTALLED_APPS = [
     'recruitment_agent',
     'marketing_agent.apps.MarketingAgentConfig',  # Use app config for agent registration
     'Frontline_agent.apps.FrontlineAgentConfig',  # Frontline Agent app
+    
+    # Celery Beat (Optional - uncomment if using Celery Beat instead of cron)
+    # 'django_celery_beat',
 ]
 
 MIDDLEWARE = [
@@ -295,24 +298,33 @@ WSGI_APPLICATION = 'project_manager_ai.wsgi.application'
 
 
 # --------------------
-# Database (SQL Server Express)
+# Database Configuration
 # --------------------
-DATABASES = {
-    'default': {
-        'ENGINE': 'mssql',
-        'NAME': os.getenv('DB_NAME', 'project_manager_db'),
-        'HOST': r'localhost\SQLEXPRESS',
-        'OPTIONS': {
-            'driver': 'ODBC Driver 17 for SQL Server',
-            'trusted_connection': 'yes',
-        },
-    }
-}
+# Use SQLite for development (no setup required)
+# To use SQL Server instead, set USE_SQL_SERVER=True in .env
+USE_SQL_SERVER = os.getenv('USE_SQL_SERVER', 'False').lower() == 'true'
 
-# ⚠️ Notes:
-# - No PORT (SQL Express uses dynamic ports)
-# - No USER / PASSWORD (Windows Authentication)
-# - No extra_params (causes invalid connection string errors)
+if USE_SQL_SERVER:
+    # SQL Server Configuration
+    DATABASES = {
+        'default': {
+            'ENGINE': 'mssql',
+            'NAME': os.getenv('DB_NAME', 'project_manager_db'),
+            'HOST': os.getenv('DB_HOST', 'localhost'),
+            'OPTIONS': {
+                'driver': 'ODBC Driver 17 for SQL Server',
+                'trusted_connection': 'yes',
+            },
+        }
+    }
+else:
+    # SQLite Configuration (default for development)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # --------------------
@@ -409,3 +421,18 @@ else:
 
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER if EMAIL_HOST_USER else 'noreply@example.com').strip()
 RECRUITER_EMAIL = os.getenv('RECRUITER_EMAIL', '').strip()
+
+# --------------------
+# Celery Configuration (Optional - for Celery Beat automation)
+# --------------------
+# Uncomment and configure if you want to use Celery Beat instead of cron
+# Requires: pip install celery redis django-celery-beat
+# See CELERY_BEAT_SETUP.md for full setup instructions
+
+# CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+# CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+# CELERY_ACCEPT_CONTENT = ['json']
+# CELERY_TASK_SERIALIZER = 'json'
+# CELERY_RESULT_SERIALIZER = 'json'
+# CELERY_TIMEZONE = TIME_ZONE
+# CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
