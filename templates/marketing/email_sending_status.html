@@ -379,40 +379,69 @@ document.addEventListener('DOMContentLoaded', function() {
             .catch(err => console.error('Error refreshing status:', err));
     }, 30000);
     
-    function updateStatusIndicators(data) {
-        // Update sequence email status
-        const statusCards = document.querySelectorAll('.status-card');
-        if (statusCards.length >= 1) {
-            const sequenceCard = statusCards[0];
-            const sequenceDot = sequenceCard.querySelector('.status-dot');
-            const sequenceStatus = sequenceCard.querySelector('.status-indicator + div + div');
-            if (data.sequence_sending) {
-                sequenceCard.classList.add('active');
-                if (sequenceDot) sequenceDot.classList.add('active');
-                if (sequenceStatus) sequenceStatus.innerHTML = '✅ Currently sending';
-            } else {
-                sequenceCard.classList.remove('active');
-                if (sequenceDot) sequenceDot.classList.remove('active');
-                if (sequenceStatus) sequenceStatus.innerHTML = '⏸️ Not sending';
-            }
-        }
-        
-        // Update pending count
-        if (statusCards.length >= 2) {
-            const pendingCard = statusCards[1];
-            const pendingDot = pendingCard.querySelector('.status-dot');
-            const pendingCount = pendingCard.querySelector('.status-indicator + div');
-            if (data.pending_count > 0) {
-                pendingCard.classList.add('pending');
-                if (pendingDot) pendingDot.classList.add('active');
-            } else {
-                pendingCard.classList.remove('pending');
-                if (pendingDot) pendingDot.classList.remove('active');
-            }
-            if (pendingCount) pendingCount.textContent = data.pending_count;
+function updateStatusIndicators(data) {
+    console.log('Updating status indicators with data:', data);
+
+    const statusCards = document.querySelectorAll('.status-card');
+
+    // === 1️⃣ Sequence Emails Card ===
+    if (statusCards.length >= 1) {
+        const sequenceCard = statusCards[0];
+        const sequenceDot = sequenceCard.querySelector('.status-dot');
+        const sequenceCountEl = sequenceCard.querySelector('div:nth-child(2)'); // the number div
+        const sequenceStatusEl = sequenceCard.querySelector('.status-indicator + div + div'); // status text
+
+        // Update total sent
+        sequenceCountEl.textContent = data.stats.total_sequence_sent;
+
+        // Update currently sending status
+        if (data.currently_sending.sequences) {
+            sequenceCard.classList.add('active');
+            sequenceDot.classList.add('active');
+            sequenceStatusEl.textContent = '✅ Currently sending';
+        } else {
+            sequenceCard.classList.remove('active');
+            sequenceDot.classList.remove('active');
+            sequenceStatusEl.textContent = '⏸️ Not sending';
         }
     }
-    
+
+    // === 2️⃣ Pending Emails Card ===
+    if (statusCards.length >= 2) {
+        const pendingCard = statusCards[1];
+        const pendingDot = pendingCard.querySelector('.status-dot');
+        const pendingCountEl = pendingCard.querySelector('div:nth-child(2)'); // the number div
+
+        const pendingCount = data.stats.pending_count;
+        pendingCountEl.textContent = pendingCount;
+
+        if (pendingCount > 0) {
+            pendingCard.classList.add('pending');
+            pendingDot.classList.add('active');
+        } else {
+            pendingCard.classList.remove('pending');
+            pendingDot.classList.remove('active');
+        }
+    }
+
+    // === 3️⃣ Upcoming Emails Card ===
+    if (statusCards.length >= 3) {
+        const upcomingCard = statusCards[2];
+        const upcomingCountEl = upcomingCard.querySelector('div:nth-child(2)'); // the number div
+
+        const upcomingCount = data.stats.upcoming_count || 0; // make sure backend sends this
+        upcomingCountEl.textContent = upcomingCount;
+
+        const upcomingDot = upcomingCard.querySelector('.status-dot');
+        if (upcomingCount > 0) {
+            upcomingDot.classList.add('active');
+        } else {
+            upcomingDot.classList.remove('active');
+        }
+    }
+}
+
+
     // Clean up on page unload
     window.addEventListener('beforeunload', function() {
         clearInterval(autoRefreshInterval);

@@ -66,6 +66,16 @@ class Command(BaseCommand):
             
             # Get active sequences for this campaign
             sequences = campaign.email_sequences.filter(is_active=True)
+            # Ensure every lead has a CampaignContact per active sequence
+            leads = list(campaign.leads.all())
+            for seq in sequences:
+                for lead in leads:
+                    CampaignContact.objects.get_or_create(
+                        campaign=campaign,
+                        lead=lead,
+                        sequence=seq,
+                        defaults={'current_step': 0},
+                    )
             sequence_count = sequences.count()
             self.stdout.write(f'  Found {sequence_count} active sequence(s)')
             
@@ -74,7 +84,12 @@ class Command(BaseCommand):
                 continue
             
             # Get all contacts for this campaign
-            all_contacts = CampaignContact.objects.filter(campaign=campaign)
+            # all_contacts = CampaignContact.objects.filter(campaign=campaign)
+            all_contacts = CampaignContact.objects.filter(
+                campaign=campaign,
+                sequence__is_active=True,
+                sequence__isnull=False,
+            )
             total_contacts = all_contacts.count()
             print("total_contacts", total_contacts)
             

@@ -461,7 +461,7 @@ class CampaignContact(models.Model):
     
     class Meta:
         ordering = ['-created_at']
-        unique_together = [('campaign', 'lead')]
+        unique_together = [('campaign', 'lead', 'sequence')]
         indexes = [
             models.Index(fields=['campaign', 'completed', 'replied']),
             models.Index(fields=['campaign', 'sequence', 'current_step']),
@@ -496,22 +496,40 @@ class CampaignContact(models.Model):
 
 
 # Signal to automatically create CampaignContact when leads are added to campaigns
+# @receiver(m2m_changed, sender=Campaign.leads.through)
+# def create_campaign_contact(sender, instance, action, pk_set, **kwargs):
+#     """Automatically create CampaignContact when leads are added to a campaign"""
+#     if action == 'post_add':
+#         from marketing_agent.models import CampaignContact, EmailSequence
+#         for lead_id in pk_set:
+#             lead = Lead.objects.get(pk=lead_id)
+#             # Get or create CampaignContact
+#             contact, created = CampaignContact.objects.get_or_create(
+#                 campaign=instance,
+#                 lead=lead,
+#                 defaults={
+#                     'sequence': instance.email_sequences.filter(is_active=True).first(),
+#                     'current_step': 0,
+#                 }
+#             )
+#             if created:
+#                 logger = logging.getLogger(__name__)
+#                 logger.info(f'Created CampaignContact for {lead.email} in campaign {instance.name}')
+
 @receiver(m2m_changed, sender=Campaign.leads.through)
 def create_campaign_contact(sender, instance, action, pk_set, **kwargs):
     """Automatically create CampaignContact when leads are added to a campaign"""
     if action == 'post_add':
-        from marketing_agent.models import CampaignContact, EmailSequence
+        active_sequences = list(instance.email_sequences.filter(is_active=True))
+        if not active_sequences:
+            return
+
         for lead_id in pk_set:
             lead = Lead.objects.get(pk=lead_id)
-            # Get or create CampaignContact
-            contact, created = CampaignContact.objects.get_or_create(
-                campaign=instance,
-                lead=lead,
-                defaults={
-                    'sequence': instance.email_sequences.filter(is_active=True).first(),
-                    'current_step': 0,
-                }
-            )
-            if created:
-                logger = logging.getLogger(__name__)
-                logger.info(f'Created CampaignContact for {lead.email} in campaign {instance.name}')
+            for seq in active_sequences:
+                CampaignContact.objects.get_or_create(
+                    campaign=instance,
+                    lead=lead,
+                    sequence=seq,
+                    defaults={'current_step': 0},
+                )

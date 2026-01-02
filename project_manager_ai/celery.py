@@ -17,3 +17,4 @@ app.autodiscover_tasks()
 def debug_task(self):
     print(f'Request: {self.request!r}')
 
+

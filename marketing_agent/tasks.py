@@ -24,3 +24,4 @@ def send_sequence_emails_task():
         logger.error(f'Error in sequence emails task: {str(e)}', exc_info=True)
         raise
 
+
