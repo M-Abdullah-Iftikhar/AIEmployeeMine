@@ -136,7 +136,45 @@ class TaskForm(forms.ModelForm):
 
 
 class CustomUserCreationForm(UserCreationForm):
-    """Custom signup form with role selection"""
+    """Custom signup form with role selection and essential fields"""
+    email = forms.EmailField(
+        required=True,
+        widget=forms.EmailInput(attrs={
+            'class': 'form-group input',
+            'placeholder': 'Enter your email address',
+            'autocomplete': 'email'
+        }),
+        help_text='Required. We\'ll never share your email with anyone else.'
+    )
+    first_name = forms.CharField(
+        required=True,
+        max_length=30,
+        widget=forms.TextInput(attrs={
+            'class': 'form-group input',
+            'placeholder': 'Enter your first name',
+            'autocomplete': 'given-name'
+        })
+    )
+    last_name = forms.CharField(
+        required=True,
+        max_length=30,
+        widget=forms.TextInput(attrs={
+            'class': 'form-group input',
+            'placeholder': 'Enter your last name',
+            'autocomplete': 'family-name'
+        })
+    )
+    phone_number = forms.CharField(
+        required=False,
+        max_length=20,
+        widget=forms.TextInput(attrs={
+            'class': 'form-group input',
+            'placeholder': 'Enter your phone number (optional)',
+            'autocomplete': 'tel',
+            'type': 'tel'
+        }),
+        help_text='Optional. Include country code (e.g., +1 234 567 8900)'
+    )
     role = forms.ChoiceField(
         choices=[
             ('project_manager', 'Project Manager'),
@@ -154,21 +192,37 @@ class CustomUserCreationForm(UserCreationForm):
     
     class Meta:
         model = User
-        fields = ('username', 'password1', 'password2', 'role')
+        fields = ('username', 'email', 'first_name', 'last_name', 'password1', 'password2', 'role', 'phone_number')
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Remove help_text from password fields so they only show on validation errors
         self.fields['password1'].help_text = None
         self.fields['password2'].help_text = None
+        # Make email required (it's required by default but let's be explicit)
+        self.fields['email'].required = True
+        
+    def clean_email(self):
+        """Validate that email is unique"""
+        email = self.cleaned_data.get('email')
+        if email and User.objects.filter(email=email).exists():
+            raise forms.ValidationError('A user with this email already exists.')
+        return email
         
     def save(self, commit=True):
         user = super().save(commit=False)
+        user.email = self.cleaned_data['email']
+        user.first_name = self.cleaned_data['first_name']
+        user.last_name = self.cleaned_data['last_name']
         if commit:
             user.save()
-            # Create or update user profile with role
+            # Create or update user profile with role and phone number
             profile, created = UserProfile.objects.get_or_create(user=user)
             profile.role = self.cleaned_data['role']
+            phone_number = self.cleaned_data.get('phone_number', '')
+            if phone_number:
+                profile.phone_number = phone_number
+            # Save profile - validation is now optional (company can be added later)
             profile.save()
         return user
 

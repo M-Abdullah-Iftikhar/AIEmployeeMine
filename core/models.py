@@ -109,9 +109,11 @@ class Task(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    blocker_reason = models.TextField(blank=True, null=True, help_text="Reason why task is blocked")
     
     # Dependencies
     depends_on = models.ManyToManyField('self', symmetrical=False, blank=True, related_name='dependent_tasks')
+    tags = models.ManyToManyField('TaskTag', blank=True, related_name='tasks')
     
     class Meta:
         ordering = ['priority', 'due_date', 'created_at']
@@ -308,6 +310,7 @@ class UserProfile(models.Model):
     company = models.ForeignKey('Company', on_delete=models.SET_NULL, null=True, blank=True, related_name='user_profiles')
     # Additional fields from payPerProject
     company_name = models.CharField(max_length=255, blank=True, null=True)
+    phone_number = models.CharField(max_length=20, blank=True, null=True, help_text="Phone number with country code")
     bio = models.TextField(blank=True, null=True)
     avatar_url = models.URLField(max_length=500, blank=True, null=True)
     location = models.CharField(max_length=255, blank=True, null=True)
@@ -315,6 +318,7 @@ class UserProfile(models.Model):
     website = models.URLField(max_length=255, blank=True, null=True)
     linkedin = models.URLField(max_length=255, blank=True, null=True)
     github = models.URLField(max_length=255, blank=True, null=True)
+    email_notifications_enabled = models.BooleanField(default=True, help_text="Enable email notifications")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -344,14 +348,18 @@ class UserProfile(models.Model):
     def clean(self):
         """Validate that project_manager role has company"""
         from django.core.exceptions import ValidationError
-        if self.role == 'project_manager' and not self.company:
-            raise ValidationError({
-                'company': 'Project Manager role requires a company association.'
-            })
+        # Make company optional - users can add it later through profile update
+        # Commented out strict validation to allow signup without company
+        # if self.role == 'project_manager' and not self.company:
+        #     raise ValidationError({
+        #         'company': 'Project Manager role requires a company association.'
+        #     })
+        pass
     
     def save(self, *args, **kwargs):
-        """Override save to call clean validation"""
-        self.full_clean()
+        """Override save - validation is optional"""
+        # Skip validation for now to allow signup without company
+        # Users can add company later through profile settings
         super().save(*args, **kwargs)
 
 
@@ -1067,11 +1075,25 @@ class PageView(models.Model):
 
 class Notification(models.Model):
     """User notifications"""
+    NOTIFICATION_TYPE_CHOICES = [
+        ('task_assigned', 'Task Assigned'),
+        ('task_updated', 'Task Updated'),
+        ('task_completed', 'Task Completed'),
+        ('comment_added', 'Comment Added'),
+        ('project_updated', 'Project Updated'),
+        ('team_member_added', 'Team Member Added'),
+        ('deadline_approaching', 'Deadline Approaching'),
+        ('milestone_reached', 'Milestone Reached'),
+        ('mention', 'Mention'),
+    ]
+    
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
-    type = models.CharField(max_length=50)
+    type = models.CharField(max_length=50)  # Keep for backward compatibility
+    notification_type = models.CharField(max_length=50, choices=NOTIFICATION_TYPE_CHOICES, blank=True, null=True)
     title = models.CharField(max_length=255)
     message = models.TextField()
     link = models.CharField(max_length=500, blank=True, null=True)
+    action_url = models.CharField(max_length=500, blank=True, null=True, help_text="URL for action button")
     is_read = models.BooleanField(default=False)
     read_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -1177,3 +1199,417 @@ class WhiteLabelProduct(models.Model):
     
     def __str__(self):
         return self.name
+
+
+# ============================================================================
+# Project Manager Agent Feature Models - Phase 1
+# ============================================================================
+
+# Email & Communication Features
+class EmailTemplate(models.Model):
+    """Email templates for notifications"""
+    name = models.CharField(max_length=100)
+    template_type = models.CharField(max_length=50, help_text="e.g., task_assigned, task_reminder, milestone_reminder")
+    subject_template = models.CharField(max_length=255)
+    body_html_template = models.TextField(blank=True, null=True)
+    body_text_template = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['name']
+        unique_together = ['name', 'template_type']
+    
+    def __str__(self):
+        return f"{self.name} ({self.template_type})"
+
+
+class EmailLog(models.Model):
+    """Log of sent emails"""
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('sent', 'Sent'),
+        ('failed', 'Failed'),
+    ]
+    
+    recipient = models.EmailField()
+    subject = models.CharField(max_length=255)
+    template = models.ForeignKey(EmailTemplate, on_delete=models.SET_NULL, null=True, blank=True)
+    sent_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    error_message = models.TextField(blank=True, null=True)
+    related_object_type = models.CharField(max_length=50, blank=True, null=True, help_text="e.g., Task, Project, Meeting")
+    related_object_id = models.IntegerField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-sent_at']
+        indexes = [
+            models.Index(fields=['recipient', '-sent_at']),
+            models.Index(fields=['status', '-sent_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.recipient} - {self.subject} - {self.status}"
+
+
+class EmailReminder(models.Model):
+    """Scheduled email reminders"""
+    REMINDER_TYPE_CHOICES = [
+        ('task_due', 'Task Due Date'),
+        ('task_assigned', 'Task Assigned'),
+        ('milestone_due', 'Milestone Due Date'),
+        ('meeting_upcoming', 'Meeting Upcoming'),
+        ('task_overdue', 'Task Overdue'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('sent', 'Sent'),
+        ('cancelled', 'Cancelled'),
+        ('failed', 'Failed'),
+    ]
+    
+    reminder_type = models.CharField(max_length=50, choices=REMINDER_TYPE_CHOICES)
+    task = models.ForeignKey('Task', on_delete=models.CASCADE, null=True, blank=True, related_name='email_reminders')
+    milestone = models.ForeignKey('ProjectMilestone', on_delete=models.CASCADE, null=True, blank=True, related_name='email_reminders')
+    meeting = models.ForeignKey('Meeting', on_delete=models.CASCADE, null=True, blank=True, related_name='email_reminders')
+    recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='email_reminders')
+    reminder_time = models.DateTimeField(help_text="When to send the reminder")
+    sent_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['reminder_time']
+        indexes = [
+            models.Index(fields=['status', 'reminder_time']),
+            models.Index(fields=['reminder_type', 'status']),
+        ]
+    
+    def __str__(self):
+        return f"{self.reminder_type} - {self.recipient.username} - {self.reminder_time}"
+
+
+# Notification System Enhancements
+class NotificationPreference(models.Model):
+    """User notification preferences"""
+    NOTIFICATION_TYPE_CHOICES = [
+        ('task_assigned', 'Task Assigned'),
+        ('task_updated', 'Task Updated'),
+        ('task_completed', 'Task Completed'),
+        ('comment_added', 'Comment Added'),
+        ('project_updated', 'Project Updated'),
+        ('team_member_added', 'Team Member Added'),
+        ('deadline_approaching', 'Deadline Approaching'),
+        ('daily_digest', 'Daily Digest'),
+        ('weekly_digest', 'Weekly Digest'),
+    ]
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notification_preferences')
+    notification_type = models.CharField(max_length=50, choices=NOTIFICATION_TYPE_CHOICES)
+    email_enabled = models.BooleanField(default=True)
+    in_app_enabled = models.BooleanField(default=True)
+    frequency = models.CharField(max_length=20, default='immediate', help_text="immediate, daily, weekly")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ['user', 'notification_type']
+        ordering = ['user', 'notification_type']
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.notification_type}"
+
+
+# Task Monitoring & Activity Tracking
+class TaskTag(models.Model):
+    """Tags for categorizing tasks"""
+    name = models.CharField(max_length=50)
+    color = models.CharField(max_length=7, default='#3B82F6', help_text="Hex color code")
+    project = models.ForeignKey('Project', on_delete=models.CASCADE, null=True, blank=True, related_name='task_tags')
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['name']
+        unique_together = ['name', 'project']
+    
+    def __str__(self):
+        return self.name
+
+
+class TaskActivityLog(models.Model):
+    """Log of task activities and changes"""
+    ACTION_TYPE_CHOICES = [
+        ('created', 'Created'),
+        ('updated', 'Updated'),
+        ('status_changed', 'Status Changed'),
+        ('assigned', 'Assigned'),
+        ('unassigned', 'Unassigned'),
+        ('due_date_changed', 'Due Date Changed'),
+        ('priority_changed', 'Priority Changed'),
+        ('comment_added', 'Comment Added'),
+        ('attachment_added', 'Attachment Added'),
+        ('completed', 'Completed'),
+        ('reopened', 'Reopened'),
+    ]
+    
+    task = models.ForeignKey('Task', on_delete=models.CASCADE, related_name='activity_logs')
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='task_activities')
+    action_type = models.CharField(max_length=50, choices=ACTION_TYPE_CHOICES)
+    old_value = models.TextField(blank=True, null=True)
+    new_value = models.TextField(blank=True, null=True)
+    details = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['task', '-created_at']),
+            models.Index(fields=['user', '-created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.task.title} - {self.action_type} - {self.created_at}"
+
+
+class DashboardView(models.Model):
+    """Saved dashboard views and filters"""
+    VIEW_TYPE_CHOICES = [
+        ('list', 'List View'),
+        ('kanban', 'Kanban Board'),
+        ('calendar', 'Calendar View'),
+        ('gantt', 'Gantt Chart'),
+    ]
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='dashboard_views')
+    name = models.CharField(max_length=100)
+    view_type = models.CharField(max_length=20, choices=VIEW_TYPE_CHOICES, default='list')
+    filters_json = models.JSONField(default=dict, blank=True, help_text="Stored filter criteria")
+    columns_json = models.JSONField(default=dict, blank=True, help_text="Column configuration")
+    is_default = models.BooleanField(default=False)
+    is_shared = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-is_default', 'name']
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.name}"
+
+
+# Task Comments & Discussion
+class TaskComment(models.Model):
+    """Comments on tasks"""
+    task = models.ForeignKey('Task', on_delete=models.CASCADE, related_name='comments')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='task_comments')
+    comment_text = models.TextField()
+    parent_comment = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='replies')
+    is_edited = models.BooleanField(default=False)
+    edited_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['created_at']
+        indexes = [
+            models.Index(fields=['task', '-created_at']),
+        ]
+    
+    def __str__(self):
+        return f"Comment on {self.task.title} by {self.user.username}"
+
+
+class CommentAttachment(models.Model):
+    """File attachments for task comments"""
+    comment = models.ForeignKey(TaskComment, on_delete=models.CASCADE, related_name='attachments')
+    file_name = models.CharField(max_length=255)
+    file_path = models.CharField(max_length=500)
+    file_size = models.BigIntegerField(help_text="File size in bytes")
+    file_type = models.CharField(max_length=50)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.file_name} - {self.comment.task.title}"
+
+
+# Time Tracking
+class TimeEntry(models.Model):
+    """Time entries for tasks"""
+    task = models.ForeignKey('Task', on_delete=models.CASCADE, related_name='time_entries')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='time_entries')
+    date = models.DateField()
+    hours = models.DecimalField(max_digits=6, decimal_places=2)
+    description = models.TextField(blank=True, null=True)
+    billable = models.BooleanField(default=True)
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_time_entries')
+    approved_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-date', '-created_at']
+        indexes = [
+            models.Index(fields=['task', '-date']),
+            models.Index(fields=['user', '-date']),
+            models.Index(fields=['date', 'user']),
+        ]
+        verbose_name_plural = 'Time Entries'
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.task.title} - {self.hours}h - {self.date}"
+
+
+class TimerSession(models.Model):
+    """Active timer sessions"""
+    task = models.ForeignKey('Task', on_delete=models.CASCADE, related_name='timer_sessions')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='timer_sessions')
+    started_at = models.DateTimeField(auto_now_add=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    duration_minutes = models.IntegerField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    description = models.TextField(blank=True, null=True)
+    
+    class Meta:
+        ordering = ['-started_at']
+        indexes = [
+            models.Index(fields=['user', 'is_active']),
+        ]
+    
+    def __str__(self):
+        status = "Active" if self.is_active else "Completed"
+        return f"{self.user.username} - {self.task.title} - {status}"
+
+
+# Project Health & Risk Management
+class ProjectHealthScore(models.Model):
+    """Project health scores over time"""
+    project = models.ForeignKey('Project', on_delete=models.CASCADE, related_name='health_scores')
+    date = models.DateField()
+    overall_score = models.IntegerField(help_text="Score 0-100")
+    budget_score = models.IntegerField(null=True, blank=True, help_text="Score 0-100")
+    timeline_score = models.IntegerField(null=True, blank=True, help_text="Score 0-100")
+    resource_score = models.IntegerField(null=True, blank=True, help_text="Score 0-100")
+    quality_score = models.IntegerField(null=True, blank=True, help_text="Score 0-100")
+    calculated_at = models.DateTimeField(auto_now_add=True)
+    notes = models.TextField(blank=True, null=True)
+    
+    class Meta:
+        ordering = ['-date', '-calculated_at']
+        unique_together = ['project', 'date']
+        indexes = [
+            models.Index(fields=['project', '-date']),
+        ]
+    
+    def __str__(self):
+        return f"{self.project.name} - {self.date} - Score: {self.overall_score}"
+
+
+class ProjectRisk(models.Model):
+    """Project risks and mitigation plans"""
+    SEVERITY_CHOICES = [
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
+        ('critical', 'Critical'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('identified', 'Identified'),
+        ('monitoring', 'Monitoring'),
+        ('mitigating', 'Mitigating'),
+        ('resolved', 'Resolved'),
+        ('closed', 'Closed'),
+    ]
+    
+    project = models.ForeignKey('Project', on_delete=models.CASCADE, related_name='risks')
+    task = models.ForeignKey('Task', on_delete=models.SET_NULL, null=True, blank=True, related_name='related_risks')
+    title = models.CharField(max_length=255)
+    description = models.TextField()
+    severity = models.CharField(max_length=20, choices=SEVERITY_CHOICES, default='medium')
+    probability = models.IntegerField(default=50, help_text="Probability percentage 0-100")
+    impact = models.CharField(max_length=255, blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='identified')
+    mitigation_plan = models.TextField(blank=True, null=True)
+    identified_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='identified_risks')
+    identified_at = models.DateTimeField(auto_now_add=True)
+    resolved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='resolved_risks')
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-severity', '-identified_at']
+        indexes = [
+            models.Index(fields=['project', 'status']),
+            models.Index(fields=['severity', 'status']),
+        ]
+    
+    def __str__(self):
+        return f"{self.project.name} - {self.title} - {self.severity}"
+
+
+class ProjectIssue(models.Model):
+    """Project issues and blockers"""
+    SEVERITY_CHOICES = [
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
+        ('critical', 'Critical'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('open', 'Open'),
+        ('in_progress', 'In Progress'),
+        ('resolved', 'Resolved'),
+        ('closed', 'Closed'),
+    ]
+    
+    project = models.ForeignKey('Project', on_delete=models.CASCADE, related_name='issues')
+    task = models.ForeignKey('Task', on_delete=models.SET_NULL, null=True, blank=True, related_name='issues')
+    title = models.CharField(max_length=255)
+    description = models.TextField()
+    severity = models.CharField(max_length=20, choices=SEVERITY_CHOICES, default='medium')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='open')
+    reported_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='reported_issues')
+    resolved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='resolved_issues')
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolution_notes = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-severity', '-created_at']
+        indexes = [
+            models.Index(fields=['project', 'status']),
+            models.Index(fields=['status', '-created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.project.name} - {self.title} - {self.status}"
+
+
+# Task Attachments
+class TaskAttachment(models.Model):
+    """File attachments for tasks"""
+    task = models.ForeignKey('Task', on_delete=models.CASCADE, related_name='attachments')
+    file_name = models.CharField(max_length=255)
+    file_path = models.CharField(max_length=500)
+    file_size = models.BigIntegerField(help_text="File size in bytes")
+    file_type = models.CharField(max_length=50)
+    uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='task_attachments')
+    download_count = models.IntegerField(default=0)
+    description = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['task', '-created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.file_name} - {self.task.title}"

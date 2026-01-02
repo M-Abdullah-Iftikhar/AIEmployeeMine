@@ -60,27 +60,35 @@ class ProjectPilotAgent(BaseAgent):
         cannot_do_item = None
         
         # More robust detection - check for user creation patterns
+        # BUT exclude cases where user mentions are about task assignment (e.g., "assign to users:", "assign to following users")
         action_words = ['create', 'add', 'make', 'new', 'register']
         user_words = ['user', 'users', 'account', 'accounts']
         
         has_action = any(word in question_lower for word in action_words)
         has_user = any(word in question_lower for word in user_words)
         
-        # If both action and user words are present, it's likely a user creation request
-        if has_action and has_user:
+        # Check if this is about assigning tasks to users (not creating users)
+        assignment_patterns = ['assign to', 'assign tasks to', 'assign to following', 'assign to users', 
+                              'assign to the following', 'only assign', 'assign only', 'assign these',
+                              'following users', 'users:', 'assign:', 'username:']
+        is_assignment_context = any(pattern in question_lower for pattern in assignment_patterns)
+        
+        # If both action and user words are present, check if it's actually about user creation
+        # NOT about assigning tasks to existing users
+        if has_action and has_user and not is_assignment_context:
+            # Only block if it's explicitly about creating users/accounts
             if any(phrase in question_lower for phrase in [
                 'create user', 'create users', 'create new user', 'create new users',
-                'add user', 'add users', 'add new user',
-                'make user', 'make users', 'make new user',
-                'new user', 'new users',
-                'register user', 'register users',
-                'user1', 'user2', 'user3', 'user4', 'user5'
-            ]) or ('create' in question_lower and ('user' in question_lower or 'users' in question_lower)):
+                'add user', 'add users', 'add new user', 'add new users',
+                'make user', 'make users', 'make new user', 'make new users',
+                'register user', 'register users', 'register new user',
+                'create account', 'create accounts', 'create new account',
+                'add account', 'add accounts', 'add new account',
+                'new user account', 'new user accounts',
+                'user account', 'user accounts'
+            ]):
                 cannot_do = True
                 cannot_do_item = 'users or user accounts'
-            elif any(phrase in question_lower for phrase in ['create account', 'add account', 'new account', 'register account']):
-                cannot_do = True
-                cannot_do_item = 'user accounts'
         
         # Check for team member creation
         if 'team member' in question_lower and any(word in question_lower for word in ['create', 'add', 'make']):
@@ -424,6 +432,26 @@ Return ONLY text - NO JSON, NO actions."""
                                              'all available developers', 'all developers', 'all users']
                     wants_assign_to_all = any(keyword in question_lower for keyword in assign_to_all_keywords)
                     
+                    # Check if user mentioned specific usernames to assign to
+                    # Look for patterns like "assign to following users:", "username: abdullah", etc.
+                    specific_usernames = []
+                    assignment_keywords_in_question = ['assign to', 'assign tasks to', 'assign to following', 
+                                                      'assign to users', 'only assign', 'assign only',
+                                                      'following users', 'assign:', 'username:']
+                    has_specific_assignment = any(keyword in question_lower for keyword in assignment_keywords_in_question)
+                    
+                    # Extract usernames from the question if available_users is provided
+                    if has_specific_assignment and available_users:
+                        # Look for username patterns in the question
+                        for user_info in available_users:
+                            username = user_info.get('username', '').lower()
+                            name = user_info.get('name', '').lower()
+                            # Check if username or name appears in the question
+                            if username and username in question_lower:
+                                specific_usernames.append(user_info)
+                            elif name and name in question_lower:
+                                specific_usernames.append(user_info)
+                    
                     # User explicitly wants a NEW project
                     assignment_instruction = ""
                     if wants_assign_to_all and available_users:
@@ -435,6 +463,18 @@ The user wants tasks assigned to ALL available developers/users. You MUST distri
 - Each task should have a different assignee_id from the available users list
 - Use ALL user IDs from the available users list above
 - Example: If there are 3 users (IDs: 1, 2, 3) and you create 6 tasks, assign: task1→user1, task2→user2, task3→user3, task4→user1, task5→user2, task6→user3"""
+                    elif specific_usernames:
+                        # User specified specific users to assign to
+                        usernames_list = ', '.join([u.get('username', 'Unknown') for u in specific_usernames])
+                        assignment_instruction = f"""
+CRITICAL ASSIGNMENT INSTRUCTION:
+The user wants tasks assigned ONLY to these specific users mentioned in their request: {usernames_list}
+- You MUST assign tasks ONLY to these users from the available users list above
+- Match the usernames mentioned in the request to the usernames in the available users list
+- Distribute tasks evenly across ONLY these specific users
+- Create at least one task per specified user, and distribute additional tasks among them
+- DO NOT assign to users not mentioned in the request
+- Example: If user mentioned "abdullah" and "hamza1", only use assignee_id for users with those usernames"""
                     elif wants_assign_to_all and not available_users:
                         assignment_instruction = "\nNOTE: User wants tasks assigned to all developers, but no users are available. Leave assignee_id as null."
                     else:
@@ -479,9 +519,12 @@ Return ONLY this JSON format (no other text):
 
 Rules:
 - Return ONLY the JSON array, no explanations
-- Break down projects into 5-10 logical tasks (or more if assigning to all users)
+- Break down projects into 8-15 logical tasks covering all major features of the system
+- Create comprehensive tasks that cover: database design, backend API, frontend UI, authentication, core features, testing, deployment
 - {assignment_instruction}
-- Set project_id to null for tasks (they'll be linked to the new project automatically)"""
+- If specific usernames were mentioned in the request, match them to the available users list by username and use those user IDs
+- Set project_id to null for tasks (they'll be linked to the new project automatically)
+- Create a detailed project description based on the system type (e.g., "Bank Management System" should include features like account management, transactions, reporting, etc.)"""
                 elif existing_project_mentioned or context.get('project'):
                     # User wants tasks in EXISTING project
                     target_project_id = project_id_to_use or (context.get('project', {}).get('id') if context.get('project') else None)
@@ -537,8 +580,10 @@ Rules:
 - Return ONLY the JSON array, no explanations
 - DO NOT include create_project action
 - Use project_id: {target_project_id} for all tasks
-- Break down into logical tasks if multiple tasks requested (or more if assigning to all users)
-- {assignment_instruction}"""
+- Break down into logical tasks if multiple tasks requested (create 8-15 tasks covering all features)
+- Create comprehensive tasks that cover: database design, backend API, frontend UI, authentication, core features, testing, deployment
+- {assignment_instruction}
+- If specific usernames were mentioned in the request, match them to the available users list by username and use those user IDs"""
                 else:
                     # Ambiguous request - ask for clarification instead of guessing
                     prompt = f"""The user's request is unclear or you cannot determine what they want.
