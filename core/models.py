@@ -110,6 +110,7 @@ class Task(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     blocker_reason = models.TextField(blank=True, null=True, help_text="Reason why task is blocked")
+    ai_reasoning = models.TextField(blank=True, null=True, help_text="AI-generated reasoning and implementation suggestions for this task")
     
     # Dependencies
     depends_on = models.ManyToManyField('self', symmetrical=False, blank=True, related_name='dependent_tasks')

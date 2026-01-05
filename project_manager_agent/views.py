@@ -482,7 +482,8 @@ def test_knowledge_qa(request):
                                 project=task_project,
                                 status=action_data.get('status', 'todo'),
                                 priority=action_data.get('priority', 'medium'),
-                                assignee_id=action_data.get('assignee_id') if action_data.get('assignee_id') else None
+                                assignee_id=action_data.get('assignee_id') if action_data.get('assignee_id') else None,
+                                ai_reasoning=action_data.get('reasoning', '')
                             )
                             
                             action_results.append({
@@ -911,7 +912,8 @@ def test_project_pilot(request):
                                 priority=action_data.get('priority', 'medium'),
                                 assignee_id=action_data.get('assignee_id') if action_data.get('assignee_id') else None,
                                 estimated_hours=estimated_hours,
-                                due_date=due_date
+                                due_date=due_date,
+                                ai_reasoning=action_data.get('reasoning', '')
                             )
                             
                             action_results.append({

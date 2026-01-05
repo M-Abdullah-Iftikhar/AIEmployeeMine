@@ -214,6 +214,7 @@ class EmailService:
                 'project_name': task.project.name,
                 'assignee_name': assignee.get_full_name() or assignee.username,
                 'task_url': self._get_task_url(task),
+                'task_reasoning': task.ai_reasoning or 'No implementation suggestions provided.',
             }
             return self.send_email(
                 recipient=assignee.email,
@@ -227,6 +228,14 @@ class EmailService:
         except EmailTemplate.DoesNotExist:
             # Use default email if no template found
             subject = f"New Task Assigned: {task.title}"
+            reasoning_section = ""
+            if task.ai_reasoning:
+                reasoning_section = f"""
+
+AI Reasoning & Implementation Suggestions:
+{task.ai_reasoning}
+
+"""
             message_text = f"""
 Hello {assignee.get_full_name() or assignee.username},
 
@@ -239,8 +248,7 @@ Due Date: {task.due_date.strftime('%Y-%m-%d %H:%M') if task.due_date else 'Not s
 
 Description:
 {task.description or 'No description provided.'}
-
-Please review and start working on this task.
+{reasoning_section}Please review and start working on this task.
 
 Task URL: {self._get_task_url(task)}
 """

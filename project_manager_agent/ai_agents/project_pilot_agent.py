@@ -513,7 +513,7 @@ Return ONLY this JSON format (no other text):
         "assignee_id": user_id_or_null,
         "priority": "medium",
         "status": "todo",
-        "reasoning": "brief explanation"
+        "reasoning": "Detailed AI reasoning and implementation suggestions: Explain WHY this task is important, HOW to implement it (step-by-step approach), what technologies/frameworks to use, potential challenges, and best practices. Provide actionable guidance that helps developers understand how to approach and complete this task."
     }}
 ]
 
@@ -521,6 +521,7 @@ Rules:
 - Return ONLY the JSON array, no explanations
 - Break down projects into 8-15 logical tasks covering all major features of the system
 - Create comprehensive tasks that cover: database design, backend API, frontend UI, authentication, core features, testing, deployment
+- For each task's "reasoning" field, provide DETAILED implementation guidance (3-5 sentences) including: why the task matters, step-by-step approach, technologies/tools to use, potential challenges, and best practices
 - {assignment_instruction}
 - If specific usernames were mentioned in the request, match them to the available users list by username and use those user IDs
 - Set project_id to null for tasks (they'll be linked to the new project automatically)
@@ -572,7 +573,7 @@ Return ONLY this JSON format (no other text):
         "assignee_id": user_id_or_null,
         "priority": "medium",
         "status": "todo",
-        "reasoning": "brief explanation"
+        "reasoning": "Detailed AI reasoning and implementation suggestions: Explain WHY this task is important, HOW to implement it (step-by-step approach), what technologies/frameworks to use, potential challenges, and best practices. Provide actionable guidance that helps developers understand how to approach and complete this task."
     }}
 ]
 
@@ -582,6 +583,7 @@ Rules:
 - Use project_id: {target_project_id} for all tasks
 - Break down into logical tasks if multiple tasks requested (create 8-15 tasks covering all features)
 - Create comprehensive tasks that cover: database design, backend API, frontend UI, authentication, core features, testing, deployment
+- For each task's "reasoning" field, provide DETAILED implementation guidance (3-5 sentences) including: why the task matters, step-by-step approach, technologies/tools to use, potential challenges, and best practices
 - {assignment_instruction}
 - If specific usernames were mentioned in the request, match them to the available users list by username and use those user IDs"""
                 else:
