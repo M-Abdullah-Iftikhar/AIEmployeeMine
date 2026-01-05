@@ -73,7 +73,17 @@ def sequence_management(request, campaign_id):
         )
         
         # Get sub-sequences for this main sequence
-        sub_sequences = sequence.sub_sequences.filter(is_active=True).prefetch_related('steps__template')
+        sub_sequences_raw = sequence.sub_sequences.filter(is_active=True).prefetch_related('steps__template')
+        
+        # Calculate effective status: sequence is only active if campaign is also active
+        campaign_is_active = campaign.status == 'active'
+        effective_is_active = campaign_is_active and sequence.is_active
+        
+        # Add effective status to sub-sequences
+        sub_sequences = []
+        for sub_seq in sub_sequences_raw:
+            sub_seq.effective_is_active = campaign_is_active and sub_seq.is_active
+            sub_sequences.append(sub_seq)
         
         sequences_data.append({
             'sequence': sequence,
@@ -85,6 +95,7 @@ def sequence_management(request, campaign_id):
             'click_rate': round(click_rate, 2),
             'debug_status_breakdown': status_breakdown,  # For debugging
             'sub_sequences': sub_sequences,  # Sub-sequences for this main sequence
+            'effective_is_active': effective_is_active,  # Effective status considering campaign
         })
     
     context = {
@@ -117,11 +128,18 @@ def create_sequence(request, campaign_id):
         # Get interest level for sub-sequences
         interest_level = data.get('interest_level', 'any') if is_sub_sequence else 'any'
         
+        # Determine if sequence should be active based on campaign status
+        # Sequence is only active when campaign is active
+        campaign_is_active = campaign.status == 'active'
+        requested_is_active = data.get('is_active', True)
+        # Only allow active if campaign is also active
+        effective_is_active = campaign_is_active and requested_is_active
+        
         sequence = EmailSequence.objects.create(
             name=data.get('name'),
             campaign=campaign,
             email_account_id=data.get('email_account_id'),
-            is_active=data.get('is_active', True),
+            is_active=effective_is_active,
             parent_sequence=parent_sequence,
             is_sub_sequence=is_sub_sequence,
             interest_level=interest_level
@@ -165,7 +183,14 @@ def update_sequence(request, campaign_id, sequence_id):
         sequence.name = data.get('name', sequence.name)
         if 'email_account_id' in data:
             sequence.email_account_id = data.get('email_account_id')
-        sequence.is_active = data.get('is_active', sequence.is_active)
+        
+        # Sync sequence status with campaign status
+        # Sequence can only be active when campaign is active
+        campaign_is_active = campaign.status == 'active'
+        requested_is_active = data.get('is_active', sequence.is_active)
+        # Only allow active if campaign is also active
+        sequence.is_active = campaign_is_active and requested_is_active
+        
         sequence.save()
         
         # Update steps if provided

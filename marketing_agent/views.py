@@ -1057,17 +1057,38 @@ def upload_leads(request, campaign_id):
                         # Always ensure CampaignContact exists for automation tracking
                         from marketing_agent.models import CampaignContact, EmailSequence
                         from django.utils import timezone
+                        from django.core.exceptions import MultipleObjectsReturned
                         print(f"Creating CampaignContact for {email}...")
-                        CampaignContact.objects.get_or_create(
-                            campaign=campaign,
-                            lead=lead,
-                            defaults={
-                                'sequence': campaign.email_sequences.filter(is_active=True).first(),
-                                'current_step': 0,
-                                'started_at': timezone.now(),
-                            }
-                        )
-                        print(f"✓ CampaignContact created for {email}")
+                        try:
+                            # Use filter().first() to safely check for existing contact
+                            # This handles cases where duplicates might exist
+                            contact = CampaignContact.objects.filter(
+                                campaign=campaign,
+                                lead=lead
+                            ).first()
+                            
+                            if not contact:
+                                # Create new contact if it doesn't exist
+                                contact = CampaignContact.objects.create(
+                                    campaign=campaign,
+                                    lead=lead,
+                                    sequence=campaign.email_sequences.filter(is_active=True).first(),
+                                    current_step=0,
+                                    started_at=timezone.now(),
+                                )
+                                print(f"✓ CampaignContact created for {email}")
+                            else:
+                                print(f"✓ CampaignContact already exists for {email}")
+                        except MultipleObjectsReturned:
+                            # If duplicates exist, just use the first one
+                            contact = CampaignContact.objects.filter(
+                                campaign=campaign,
+                                lead=lead
+                            ).first()
+                            print(f"✓ Using existing CampaignContact for {email} (duplicates found)")
+                        except Exception as e:
+                            logger.warning(f'Error creating CampaignContact for {email}: {str(e)}')
+                            print(f"⚠ Warning creating CampaignContact for {email}: {str(e)}")
                         print(f"=== Row {index + 2} COMPLETE ===\n")
                     except Exception as e:
                         import traceback
@@ -1086,19 +1107,31 @@ def upload_leads(request, campaign_id):
             # Ensure CampaignContact exists for ALL leads in campaign (backfill if needed)
             from marketing_agent.models import CampaignContact, EmailSequence
             from django.utils import timezone
+            from django.core.exceptions import MultipleObjectsReturned
             contacts_created = 0
             for lead in campaign.leads.all():
-                contact, created = CampaignContact.objects.get_or_create(
-                    campaign=campaign,
-                    lead=lead,
-                    defaults={
-                        'sequence': campaign.email_sequences.filter(is_active=True).first(),
-                        'current_step': 0,
-                        'started_at': timezone.now(),
-                    }
-                )
-                if created:
-                    contacts_created += 1
+                try:
+                    # Use filter().first() to safely check for existing contact
+                    contact = CampaignContact.objects.filter(
+                        campaign=campaign,
+                        lead=lead
+                    ).first()
+                    
+                    if not contact:
+                        # Create new contact if it doesn't exist
+                        contact = CampaignContact.objects.create(
+                            campaign=campaign,
+                            lead=lead,
+                            sequence=campaign.email_sequences.filter(is_active=True).first(),
+                            current_step=0,
+                            started_at=timezone.now(),
+                        )
+                        contacts_created += 1
+                except MultipleObjectsReturned:
+                    # If duplicates exist, just use the first one (already exists)
+                    pass
+                except Exception as e:
+                    logger.warning(f'Error creating CampaignContact for lead {lead.email}: {str(e)}')
             
             # Force refresh from database to get latest state
             campaign.refresh_from_db()

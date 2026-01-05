@@ -500,27 +500,30 @@ class Command(BaseCommand):
         send_reason = ''
         
         if contact.current_step == 0:
-            # First step - check campaign start date
-            if campaign.start_date:
-                reference_time = timezone.make_aware(
-                    datetime.combine(campaign.start_date, datetime.min.time())
-                )
-            else:
-                reference_time = campaign.created_at
+            # First step - ALWAYS use current time as reference
+            # This ensures delays are calculated from now, not from old campaign dates
+            reference_time = timezone.now()
             
             delay = timedelta(
                 days=next_step.delay_days,
                 hours=next_step.delay_hours,
                 minutes=next_step.delay_minutes
             )
-            send_time = reference_time + delay
             
-            if timezone.now() >= send_time:
+            # For step 0, if delay is 0 or very small (≤ 1 minute), send immediately
+            # Otherwise, calculate send_time and check if we should wait
+            if delay.total_seconds() <= 60:  # 1 minute or less
                 should_send = True
-                send_reason = f'First step delay passed (started: {reference_time})'
+                send_reason = f'First step (delay: {delay.total_seconds()}s - sending immediately)'
             else:
-                time_remaining = send_time - timezone.now()
-                self.stdout.write(f'    Waiting for first step: {time_remaining} remaining')
+                # For longer delays, calculate send_time from current time
+                send_time = reference_time + delay
+                if timezone.now() >= send_time:
+                    should_send = True
+                    send_reason = f'First step delay passed (reference: {reference_time})'
+                else:
+                    time_remaining = send_time - timezone.now()
+                    self.stdout.write(f'    Waiting for first step: {time_remaining} remaining (delay: {delay})')
         else:
             # Subsequent steps - check delay from last sent
             if not contact.last_sent_at:

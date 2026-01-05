@@ -1,7 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
-from django.db.models.signals import m2m_changed
+from django.db.models.signals import m2m_changed, pre_save
 from django.dispatch import receiver
 import json
 import logging
@@ -737,3 +737,37 @@ def create_campaign_contact(sender, instance, action, pk_set, **kwargs):
                     sequence=seq,
                     defaults={'current_step': 0},
                 )
+
+
+@receiver(pre_save, sender=Campaign)
+def sync_sequence_status_with_campaign(sender, instance, **kwargs):
+    """Sync email sequence status with campaign status"""
+    # Only process if this is an update (has pk) and status is changing
+    if instance.pk:
+        try:
+            old_campaign = Campaign.objects.get(pk=instance.pk)
+            # If campaign status changed, sync all sequences
+            if old_campaign.status != instance.status:
+                campaign_is_active = instance.status == 'active'
+                # Update all sequences for this campaign
+                # Only sequences that were previously active should be affected
+                sequences = EmailSequence.objects.filter(campaign=instance)
+                for sequence in sequences:
+                    # If campaign becomes inactive, deactivate sequences
+                    # If campaign becomes active, restore sequences that were previously active
+                    if not campaign_is_active:
+                        # Campaign is not active, so sequence should be inactive
+                        sequence.is_active = False
+                    else:
+                        # Campaign is active, but we don't auto-activate sequences
+                        # They keep their current is_active value
+                        # This allows users to manually control sequence activation
+                        pass
+                    sequence.save()
+                logger.info(
+                    f'Synced {sequences.count()} sequence(s) status with campaign "{instance.name}" '
+                    f'(status changed from {old_campaign.status} to {instance.status})'
+                )
+        except Campaign.DoesNotExist:
+            # New campaign, no need to sync
+            pass

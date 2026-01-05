@@ -220,19 +220,19 @@
                 </a>
             </p>
         </div>
-        <div style="display: flex; gap: 0.75rem;">
-            <button onclick="refreshSequenceStats()" class="btn btn-secondary" title="Refresh statistics">
+        <div style="display: flex; gap: 0.75rem; width: 40%;">
+            <!-- <button onclick="refreshSequenceStats()" class="btn btn-secondary" title="Refresh statistics">
                 🔄 Refresh Stats
-            </button>
+            </button> -->
             <button onclick="showCreateTemplateModal()" class="btn btn-secondary">
                 ✏️ Create Email Template
             </button>
             <button onclick="showCreateSequenceModal()" class="btn btn-primary">
                 ➕ Create New Sequence
             </button>
-            <button onclick="debugSequenceStats()" class="btn btn-secondary" title="Debug stats in console" style="font-size: 0.875rem; padding: 0.5rem 0.75rem;">
+            <!-- <button onclick="debugSequenceStats()" class="btn btn-secondary" title="Debug stats in console" style="font-size: 0.875rem; padding: 0.5rem 0.75rem;">
                 🐛 Debug Stats
-            </button>
+            </button> -->
         </div>
     </div>
 
@@ -263,7 +263,7 @@
                 </div>
 
                 <!-- Right: Buttons -->
-                <div style="display: flex; gap: 0.5rem;">
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                     <button onclick="showViewTemplateModal({{ template.id }})"
                         style="font-size: 0.75rem; padding: 0.25rem 0.5rem; background: #e5e7eb; border: none; border-radius: 0.25rem; cursor: pointer;">
                         👁️ View
@@ -271,6 +271,14 @@
                     <button onclick="showTestEmailModal({{ template.id }})"
                         style="font-size: 0.75rem; padding: 0.25rem 0.5rem; background: #10b981; color: white; border: none; border-radius: 0.25rem; cursor: pointer;">
                         ✉️ Test
+                    </button>
+                    <button onclick="showEditTemplateModal({{ template.id }})"
+                        style="font-size: 0.75rem; padding: 0.25rem 0.5rem; background: #3b82f6; color: white; border: none; border-radius: 0.25rem; cursor: pointer;">
+                        ✏️ Edit
+                    </button>
+                    <button onclick="deleteTemplate({{ template.id }}, '{{ template.name|escapejs }}')"
+                        style="font-size: 0.75rem; padding: 0.25rem 0.5rem; background: #ef4444; color: white; border: none; border-radius: 0.25rem; cursor: pointer;">
+                        🗑️ Delete
                     </button>
                 </div>
             </div>
@@ -296,10 +304,10 @@
         <div style="display: flex; flex-direction: column; gap: 1rem;">
             {% for seq_data in sequences %}
             <div style="border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1rem; background: white;" 
-                 data-sequence-id="{{ seq_data.sequence.id }}"
-                 data-debug-sent="{{ seq_data.total_sent }}"
-                 data-debug-opened="{{ seq_data.total_opened }}"
-                 data-debug-clicked="{{ seq_data.total_clicked }}">
+                 data-sequence-id="{{ seq_data.sequence.id }}">
+                  <!-- data-debug-sent="{{ seq_data.total_sent }}"  -->
+                 <!-- data-debug-opened="{{ seq_data.total_opened }}" -->
+                 <!-- data-debug-clicked="{{ seq_data.total_clicked }}"> -->
 
                 <!-- Header -->
                 <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -308,9 +316,14 @@
                             {{ seq_data.sequence.name }}
                             <span
                                 style="padding: 0.15rem 0.4rem; border-radius: 0.25rem; font-size: 0.75rem; 
-                                     {% if seq_data.sequence.is_active %}background: #d1fae5; color: #065f46;{% else %}background: #fee2e2; color: #991b1b;{% endif %}">
-                                {% if seq_data.sequence.is_active %}Active{% else %}Inactive{% endif %}
+                                     {% if seq_data.effective_is_active %}background: #d1fae5; color: #065f46;{% else %}background: #fee2e2; color: #991b1b;{% endif %}">
+                                {% if seq_data.effective_is_active %}Active{% else %}Inactive{% endif %}
                             </span>
+                            {% if not seq_data.effective_is_active and campaign.status != 'active' %}
+                            <span style="font-size: 0.7rem; color: #6b7280; font-style: italic;">
+                                (Campaign is {{ campaign.get_status_display }})
+                            </span>
+                            {% endif %}
                         </h3>
                         {% if seq_data.sequence.email_account %}
                         <p style="margin: 0.25rem 0 0 0; color: #6b7280; font-size: 0.875rem;">
@@ -430,8 +443,8 @@
                                     <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
                                         <span style="font-weight: 600; color: #5b21b6; font-size: 0.875rem;">{{ sub_seq.name }}</span>
                                         <span style="padding: 0.1rem 0.3rem; border-radius: 0.25rem; font-size: 0.65rem; 
-                                             {% if sub_seq.is_active %}background: #d1fae5; color: #065f46;{% else %}background: #fee2e2; color: #991b1b;{% endif %}">
-                                            {% if sub_seq.is_active %}Active{% else %}Inactive{% endif %}
+                                             {% if sub_seq.effective_is_active %}background: #d1fae5; color: #065f46;{% else %}background: #fee2e2; color: #991b1b;{% endif %}">
+                                            {% if sub_seq.effective_is_active %}Active{% else %}Inactive{% endif %}
                                         </span>
                                     </div>
                                     <div style="font-size: 0.75rem; color: #6b7280;">
@@ -624,6 +637,11 @@
           <label for="sequence-is-active" style="margin:0; font-weight:500;">
             Active (send emails automatically)
           </label>
+          {% if campaign.status != 'active' %}
+          <div id="campaign-status-warning" style="margin-left: auto; padding: 0.5rem; background: #fef3c7; border-radius: 0.25rem; font-size: 0.75rem; color: #92400e;">
+            ⚠️ Sequence will be inactive because campaign is {{ campaign.get_status_display|lower }}
+          </div>
+          {% endif %}
         </div>
 
         <!-- Steps Header -->
@@ -812,6 +830,57 @@
         </div>
     </div>
 
+    <!-- Edit Email Template Modal -->
+    <div id="editTemplateModal" class="modal">
+        <div class="modal-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <h2 style="margin: 0; color: #1f2937;">✏️ Edit Email Template</h2>
+                <button onclick="closeEditTemplateModal()"
+                    style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #6b7280;">&times;</button>
+            </div>
+            <form id="edit-template-form">
+                {% csrf_token %}
+                <input type="hidden" id="edit-template-id" name="template_id">
+                <div class="form-group">
+                    <label for="edit-template-name">Template Name *</label>
+                    <input type="text" id="edit-template-name" name="name" required
+                        placeholder="e.g., Welcome Email, Product Introduction"
+                        style="width: 100%; padding: 0.75rem; border: 2px solid #e5e7eb; border-radius: 0.5rem;">
+                </div>
+                <div class="form-group">
+                    <label for="edit-template-subject">Email Subject *</label>
+                    <input type="text" id="edit-template-subject" name="subject" required
+                        placeholder="e.g., Welcome to {{ campaign.name }}!"
+                        style="width: 100%; padding: 0.75rem; border: 2px solid #e5e7eb; border-radius: 0.5rem;">
+                    <small style="color: #6b7280; display: block; margin-top: 0.25rem;">Available variables:
+                        {{lead_name}}, {{campaign_name}}, {{lead_email}}, {{lead_company}}</small>
+                </div>
+                <div class="form-group">
+                    <label for="edit-template-html-content">HTML Content *</label>
+                    <textarea id="edit-template-html-content" name="html_content" rows="15" required
+                        style="width: 100%; padding: 0.75rem; border: 2px solid #e5e7eb; border-radius: 0.5rem; font-family: monospace;"></textarea>
+                    <small style="color: #6b7280; display: block; margin-top: 0.25rem;">Available variables:
+                        {{lead_name}}, {{campaign_name}}, {{lead_email}}, {{lead_company}}</small>
+                </div>
+                <div class="form-group">
+                    <label for="edit-template-text-content">Plain Text Content (Optional)</label>
+                    <textarea id="edit-template-text-content" name="text_content" rows="10"
+                        placeholder="Plain text version for email clients that don't support HTML"
+                        style="width: 100%; padding: 0.75rem; border: 2px solid #e5e7eb; border-radius: 0.5rem; font-family: monospace;"></textarea>
+                </div>
+                <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem; background: #f9fafb; padding: 0.75rem; border-radius: 0.5rem;">
+                    <input type="checkbox" id="edit-template-is-active" name="is_active" checked style="width: auto;">
+                    <label for="edit-template-is-active" style="margin: 0; font-weight: 500;">Active (template is enabled)</label>
+                </div>
+                <div id="edit-template-message" style="margin-top: 1rem;"></div>
+                <div style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 2rem;">
+                    <button type="button" onclick="closeEditTemplateModal()" class="btn btn-secondary">Cancel</button>
+                    <button type="button" onclick="handleUpdateTemplate()" class="btn btn-primary">Update Template</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         // Debug: Log page load stats
         try {
@@ -861,6 +930,24 @@
             // Hide parent sequence field for main sequences
             const parentField = document.getElementById('parent-sequence-field');
             if (parentField) parentField.style.display = 'none';
+            
+            // Handle campaign status
+            const campaignStatus = '{{ campaign.status }}';
+            const isActiveCheckbox = document.getElementById('sequence-is-active');
+            const warningDiv = document.getElementById('campaign-status-warning');
+            if (campaignStatus !== 'active') {
+                if (isActiveCheckbox) {
+                    isActiveCheckbox.checked = false;
+                    isActiveCheckbox.disabled = true;
+                }
+                if (warningDiv) warningDiv.style.display = 'block';
+            } else {
+                if (isActiveCheckbox) {
+                    isActiveCheckbox.disabled = false;
+                }
+                if (warningDiv) warningDiv.style.display = 'none';
+            }
+            
             document.getElementById('sequenceModal').classList.add('show');
         }
         
@@ -880,6 +967,24 @@
             }
             const parentInput = document.getElementById('parent-sequence-id');
             if (parentInput) parentInput.value = parentSequenceId;
+            
+            // Handle campaign status
+            const campaignStatus = '{{ campaign.status }}';
+            const isActiveCheckbox = document.getElementById('sequence-is-active');
+            const warningDiv = document.getElementById('campaign-status-warning');
+            if (campaignStatus !== 'active') {
+                if (isActiveCheckbox) {
+                    isActiveCheckbox.checked = false;
+                    isActiveCheckbox.disabled = true;
+                }
+                if (warningDiv) warningDiv.style.display = 'block';
+            } else {
+                if (isActiveCheckbox) {
+                    isActiveCheckbox.disabled = false;
+                }
+                if (warningDiv) warningDiv.style.display = 'none';
+            }
+            
             document.getElementById('sequenceModal').classList.add('show');
         };
 
@@ -910,7 +1015,24 @@
                         const seq = data.sequence;
                         document.getElementById('sequence-name').value = seq.name || '';
                         document.getElementById('sequence-email-account').value = seq.email_account_id || '';
-                        document.getElementById('sequence-is-active').checked = seq.is_active || false;
+                        
+                        // Handle campaign status
+                        const campaignStatus = '{{ campaign.status }}';
+                        const isActiveCheckbox = document.getElementById('sequence-is-active');
+                        const warningDiv = document.getElementById('campaign-status-warning');
+                        if (campaignStatus !== 'active') {
+                            if (isActiveCheckbox) {
+                                isActiveCheckbox.checked = false;
+                                isActiveCheckbox.disabled = true;
+                            }
+                            if (warningDiv) warningDiv.style.display = 'block';
+                        } else {
+                            if (isActiveCheckbox) {
+                                isActiveCheckbox.checked = seq.is_active || false;
+                                isActiveCheckbox.disabled = false;
+                            }
+                            if (warningDiv) warningDiv.style.display = 'none';
+                        }
                         
                         // Handle parent sequence for sub-sequences
                         if (seq.is_sub_sequence && seq.parent_sequence_id) {
@@ -1545,6 +1667,121 @@
                 }
             } catch (error) {
                 messageDiv.innerHTML = '<div style="color: #ef4444; padding: 0.75rem; background: #fee2e2; border-radius: 0.5rem;">Error: ' + error.message + '</div>';
+            }
+        }
+
+        // Edit Template Functions
+        async function showEditTemplateModal(templateId) {
+            console.log('showEditTemplateModal called with templateId:', templateId);
+            const url = `{% url 'email_template_detail' campaign.id 0 %}`.replace('0', templateId);
+            
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                
+                if (data.success) {
+                    const template = data.template;
+                    document.getElementById('edit-template-id').value = template.id;
+                    document.getElementById('edit-template-name').value = template.name || '';
+                    document.getElementById('edit-template-subject').value = template.subject || '';
+                    document.getElementById('edit-template-html-content').value = template.html_content || '';
+                    document.getElementById('edit-template-text-content').value = template.text_content || '';
+                    document.getElementById('edit-template-is-active').checked = template.is_active !== false;
+                    document.getElementById('edit-template-message').innerHTML = '';
+                    document.getElementById('editTemplateModal').classList.add('show');
+                } else {
+                    alert('Error loading template: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error in showEditTemplateModal:', error);
+                alert('Error loading template: ' + error.message);
+            }
+        }
+
+        function closeEditTemplateModal() {
+            document.getElementById('editTemplateModal').classList.remove('show');
+        }
+
+        async function handleUpdateTemplate() {
+            const form = document.getElementById('edit-template-form');
+            const formData = new FormData(form);
+            const templateId = document.getElementById('edit-template-id').value;
+            const messageDiv = document.getElementById('edit-template-message');
+            
+            if (!templateId) {
+                messageDiv.innerHTML = '<div style="color: #ef4444; padding: 0.75rem; background: #fee2e2; border-radius: 0.5rem;">Template ID is missing.</div>';
+                return;
+            }
+            
+            const data = {
+                name: formData.get('name'),
+                email_type: 'initial', // Default value
+                subject: formData.get('subject'),
+                html_content: formData.get('html_content'),
+                text_content: formData.get('text_content'),
+                is_active: document.getElementById('edit-template-is-active').checked
+            };
+            
+            if (!data.name || !data.subject || !data.html_content) {
+                messageDiv.innerHTML = '<div style="color: #ef4444; padding: 0.75rem; background: #fee2e2; border-radius: 0.5rem;">Please fill in all required fields.</div>';
+                return;
+            }
+            
+            try {
+                const url = `{% url 'email_template_detail' campaign.id 0 %}`.replace('0', templateId);
+                const response = await fetch(url, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    messageDiv.innerHTML = '<div style="color: #10b981; padding: 0.75rem; background: #d1fae5; border-radius: 0.5rem;">✓ Template updated successfully! Refreshing page...</div>';
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
+                } else {
+                    messageDiv.innerHTML = '<div style="color: #ef4444; padding: 0.75rem; background: #fee2e2; border-radius: 0.5rem;">Error: ' + (result.error || 'Failed to update template') + '</div>';
+                }
+            } catch (error) {
+                messageDiv.innerHTML = '<div style="color: #ef4444; padding: 0.75rem; background: #fee2e2; border-radius: 0.5rem;">Error: ' + error.message + '</div>';
+            }
+        }
+
+        // Delete Template Function
+        async function deleteTemplate(templateId, templateName) {
+            if (!confirm(`Are you sure you want to delete the template "${templateName}"?\n\nThis action cannot be undone.`)) {
+                return;
+            }
+            
+            try {
+                const url = `{% url 'email_template_detail' campaign.id 0 %}`.replace('0', templateId);
+                const response = await fetch(url, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert('Template deleted successfully!');
+                    location.reload();
+                } else {
+                    alert('Error: ' + (result.error || 'Failed to delete template'));
+                }
+            } catch (error) {
+                console.error('Error deleting template:', error);
+                alert('Error deleting template: ' + error.message);
             }
         }
 

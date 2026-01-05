@@ -58,6 +58,7 @@ urlpatterns = [
     # Email sending status
     path('campaigns/<int:campaign_id>/email-status/', views_email_status.email_sending_status, name='email_sending_status'),
     path('campaigns/<int:campaign_id>/email-status/api/', views_email_status.email_status_api, name='email_status_api'),
+    path('campaigns/<int:campaign_id>/debug-sequence-times/', views_email_status.debug_sequence_times, name='debug_sequence_times'),
     # Manual sequence email trigger
     path('campaigns/<int:campaign_id>/trigger-sequence-emails/', views_sequence_sender.trigger_sequence_emails, name='trigger_sequence_emails'),
 ]

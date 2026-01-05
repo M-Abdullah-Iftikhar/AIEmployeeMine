@@ -255,6 +255,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    
+    # Third party apps
+    'rest_framework',
+    'rest_framework.authtoken',
 
     'core',
     'project_manager_agent',
@@ -263,6 +267,7 @@ INSTALLED_APPS = [
     'Frontline_agent.apps.FrontlineAgentConfig',  # Frontline Agent app
     
    
+    'api',  # API app
 ]
 
 MIDDLEWARE = [
@@ -352,6 +357,12 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 
+# --------------------
+# Media files (for file uploads)
+# --------------------
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
 
 # --------------------
 # Default PK
@@ -429,3 +440,35 @@ RECRUITER_EMAIL = os.getenv('RECRUITER_EMAIL', '').strip()
 # For production, use your actual domain
 SITE_URL = os.getenv('SITE_URL', 'https://fiddly-uncouth-ryan.ngrok-free.dev')
 
+# --------------------
+# Email Tracking Configuration
+# --------------------
+# Base URL for email tracking (opens/clicks)
+# For local testing with ngrok, use your ngrok URL
+# For production, use your actual domain
+# SITE_URL = os.getenv('SITE_URL', 'https://fiddly-uncouth-ryan.ngrok-free.dev')
+
+
+# --------------------
+# REST Framework Configuration
+# --------------------
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.TokenAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20,
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+        'rest_framework.renderers.BrowsableAPIRenderer',
+    ],
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+        'rest_framework.parsers.FormParser',
+        'rest_framework.parsers.MultiPartParser',
+    ],
+}

@@ -54,6 +54,12 @@ urlpatterns = [
     
     # Marketing Agent
     path('marketing/', include('marketing_agent.urls')),
+    
+    # API Routes
+    path('api/', include('api.urls')),
+    
+    # Project Manager API endpoints
+    path('api/project-manager/', include('core.api_urls')),
 
     path('', user_login, name='home'),  # Home redirects to login
 ]

@@ -125,6 +125,11 @@
         border-bottom: 2px solid var(--border-color);
         padding-bottom: 0.5rem;
         font-size: 1.5rem;
+        font-weight: 700;
+    }
+
+    .result-content h2:first-child {
+        margin-top: 0;
     }
 
     .result-content h3 {
@@ -132,6 +137,15 @@
         margin-bottom: 0.75rem;
         color: var(--text-primary);
         font-size: 1.25rem;
+        font-weight: 600;
+    }
+
+    .result-content h4 {
+        margin-top: 1.25rem;
+        margin-bottom: 0.75rem;
+        color: var(--text-primary);
+        font-size: 1.1rem;
+        font-weight: 600;
     }
 
     .result-content ul,
@@ -146,21 +160,35 @@
 
     .result-content table {
         width: 100%;
-        margin: 1rem 0;
+        margin: 1.5rem 0;
         border-collapse: collapse;
         font-size: 0.95rem;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        border-radius: var(--radius-md);
+        overflow: hidden;
     }
 
     .result-content table th,
     .result-content table td {
         border: 1px solid var(--border-color);
-        padding: 0.75rem;
+        padding: 0.875rem 1rem;
         text-align: left;
     }
 
     .result-content table th {
-        background-color: var(--background-color);
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(168, 85, 247, 0.1) 100%);
         font-weight: 600;
+        color: var(--text-primary);
+        border-bottom: 2px solid var(--primary-color);
+    }
+
+    .result-content table tr:nth-child(even) {
+        background-color: rgba(99, 102, 241, 0.02);
+    }
+
+    .result-content table tr:hover {
+        background-color: rgba(99, 102, 241, 0.05);
+        transition: background-color 0.2s ease;
     }
 
     .result-content hr {
@@ -364,12 +392,64 @@
         <form id="qa-form" onsubmit="handleQA(event)">
             {% csrf_token %}
             <div class="form-group">
-                <label for="qa-question">Ask a Marketing Question</label>
-                <textarea id="qa-question" name="question"
-                    placeholder="Examples:&#10;• Why are sales dropping?&#10;• What campaigns are performing best?&#10;• What is our ROI?&#10;• Which channels are most effective?&#10;• What should we focus on?"
-                    required></textarea>
+                <label for="qa-question">
+                    <span>💬</span> Ask a Marketing Question <span class="required-field">*</span>
+                </label>
+                <div style="position: relative;">
+                    <textarea id="qa-question" name="question"
+                        placeholder="Type your question here or select from suggested questions below..."
+                        required
+                        style="width: 100%; padding: 0.75rem; border: 2px solid var(--border-color); border-radius: var(--radius-md); font-size: 1rem; resize: vertical; min-height: 120px;"
+                    ></textarea>
+                </div>
+                <div class="field-hint">Type your question or select from suggested questions below</div>
             </div>
-            <button type="submit" class="btn btn-primary">Ask AI</button>
+
+            <!-- Suggested Questions Dropdown -->
+            <div class="form-group" style="margin-bottom: 1.5rem;">
+                <label for="suggested-questions">
+                    <span>💡</span> Suggested Questions
+                </label>
+                <select 
+                    id="suggested-questions" 
+                    onchange="fillQuestionFromSuggestion(this.value)"
+                    style="width: 100%; padding: 0.75rem; border: 2px solid var(--border-color); border-radius: var(--radius-md); font-size: 1rem; background: var(--card-background); cursor: pointer;"
+                >
+                    <option value="">-- Select a suggested question --</option>
+                    <optgroup label="📊 Performance & Analytics">
+                        <option value="What campaigns are performing best?">What campaigns are performing best?</option>
+                        <option value="What is our overall ROI?">What is our overall ROI?</option>
+                        <option value="Which marketing channels are most effective?">Which marketing channels are most effective?</option>
+                        <option value="What is our conversion rate?">What is our conversion rate?</option>
+                        <option value="How are our campaigns performing this month?">How are our campaigns performing this month?</option>
+                        <option value="What is our customer acquisition cost (CAC)?">What is our customer acquisition cost (CAC)?</option>
+                    </optgroup>
+                    <optgroup label="🔍 Analysis & Insights">
+                        <option value="Why are sales dropping?">Why are sales dropping?</option>
+                        <option value="What should we focus on to improve performance?">What should we focus on to improve performance?</option>
+                        <option value="What are the key trends in our marketing data?">What are the key trends in our marketing data?</option>
+                        <option value="Which campaigns need optimization?">Which campaigns need optimization?</option>
+                        <option value="What are our top performing campaigns and why?">What are our top performing campaigns and why?</option>
+                    </optgroup>
+                    <optgroup label="📈 Goals & Targets">
+                        <option value="Are we meeting our revenue targets?">Are we meeting our revenue targets?</option>
+                        <option value="How many leads have we generated this month?">How many leads have we generated this month?</option>
+                        <option value="What is our lead conversion rate?">What is our lead conversion rate?</option>
+                        <option value="Are we on track to meet our campaign goals?">Are we on track to meet our campaign goals?</option>
+                    </optgroup>
+                    <optgroup label="💼 Strategy & Recommendations">
+                        <option value="What marketing strategies should we implement?">What marketing strategies should we implement?</option>
+                        <option value="What opportunities are we missing?">What opportunities are we missing?</option>
+                        <option value="How can we improve our campaign performance?">How can we improve our campaign performance?</option>
+                        <option value="What are the best practices for our industry?">What are the best practices for our industry?</option>
+                    </optgroup>
+                </select>
+                <div class="field-hint">Select a question to auto-fill the question field</div>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width: 100%; padding: 1rem; font-size: 1.1rem; font-weight: 600;">
+                <span>🤖</span> Ask AI
+            </button>
         </form>
 
         <div class="loading" id="qa-loading">
@@ -410,13 +490,59 @@
                     required></textarea>
             </div>
 
-            <div class="form-group">
-                <label for="research-context">Additional Context (Optional - JSON format)</label>
-                <textarea id="research-context" name="context"
-                    placeholder='{"competitors": ["Competitor A", "Competitor B"], "industry": "Technology", "geographic_region": "North America"}'
-                    rows="3"></textarea>
-                <small style="color: var(--text-secondary);">Optional: Add competitor names, industry, geographic
-                    region, etc.</small>
+            <!-- Additional Context Section -->
+            <div class="campaign-section" style="margin-bottom: 1.5rem;">
+                <div class="section-header">
+                    <span class="section-icon">📋</span>
+                    <h5>Additional Context (Optional)</h5>
+                </div>
+                <p style="color: var(--text-secondary); margin-bottom: 1.5rem; font-size: 0.9rem;">
+                    Provide additional context to help the AI conduct more targeted research.
+                </p>
+
+                <div class="form-grid">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label for="research-competitors">
+                            <span>🏢</span> Competitors
+                        </label>
+                        <input 
+                            type="text" 
+                            id="research-competitors" 
+                            name="competitors"
+                            placeholder="e.g., Competitor A, Competitor B, Competitor C"
+                            style="width: 100%; padding: 0.75rem; border: 2px solid var(--border-color); border-radius: var(--radius-md); font-size: 1rem;"
+                        />
+                        <div class="field-hint">Comma-separated list of competitor names</div>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label for="research-industry">
+                            <span>💼</span> Industry
+                        </label>
+                        <input 
+                            type="text" 
+                            id="research-industry" 
+                            name="industry"
+                            placeholder="e.g., Technology, Healthcare, Finance"
+                            style="width: 100%; padding: 0.75rem; border: 2px solid var(--border-color); border-radius: var(--radius-md); font-size: 1rem;"
+                        />
+                        <div class="field-hint">Target industry or sector</div>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label for="research-region">
+                            <span>🌍</span> Geographic Region
+                        </label>
+                        <input 
+                            type="text" 
+                            id="research-region" 
+                            name="geographic_region"
+                            placeholder="e.g., North America, Europe, Asia-Pacific"
+                            style="width: 100%; padding: 0.75rem; border: 2px solid var(--border-color); border-radius: var(--radius-md); font-size: 1rem;"
+                        />
+                        <div class="field-hint">Geographic region or market</div>
+                    </div>
+                </div>
             </div>
 
             <button type="submit" class="btn btn-primary">🔍 Conduct Research</button>
@@ -1210,10 +1336,28 @@
         }
     }
 
+    // Fill question from suggested questions dropdown
+    function fillQuestionFromSuggestion(value) {
+        if (value) {
+            const questionField = document.getElementById('qa-question');
+            questionField.value = value;
+            questionField.focus();
+            // Reset dropdown to placeholder
+            setTimeout(() => {
+                document.getElementById('suggested-questions').value = '';
+            }, 100);
+        }
+    }
+
     async function handleQA(event) {
         event.preventDefault();
 
-        const question = document.getElementById('qa-question').value;
+        const question = document.getElementById('qa-question').value.trim();
+        if (!question) {
+            alert('Please enter a question or select from suggested questions.');
+            return;
+        }
+
         const loading = document.getElementById('qa-loading');
         const result = document.getElementById('qa-result');
         const resultContent = document.getElementById('qa-result-content');
@@ -1237,24 +1381,75 @@
             const data = await response.json();
 
             if (data.success) {
-                let output = data.answer || 'No answer provided.';
+                let output = '';
 
-                // Add insights if available
+                // Format the answer with proper structure
+                if (data.answer) {
+                    // Check if answer is already in markdown format
+                    if (data.answer.includes('##') || data.answer.includes('**') || data.answer.includes('|')) {
+                        output = data.answer;
+                    } else {
+                        // Structure plain text answer
+                        output = `## 📊 Analysis\n\n${data.answer}`;
+                    }
+                } else {
+                    output = '## 📊 Analysis\n\nNo answer provided.';
+                }
+
+                // Add insights if available - format as a structured section
                 if (data.insights && data.insights.length > 0) {
-                    output += '\n\n📊 Key Insights:\n';
-                    data.insights.forEach(insight => {
-                        output += `• ${insight.title}: ${insight.value}\n`;
+                    output += '\n\n---\n\n## 📈 Key Insights & Metrics\n\n';
+                    
+                    // Check if insights should be formatted as a table
+                    const hasMultipleValues = data.insights.some(insight => insight.value && insight.value.includes(':'));
+                    
+                    if (hasMultipleValues || data.insights.length > 3) {
+                        // Format as table for better readability
+                        output += '| Metric | Value |\n';
+                        output += '|--------|-------|\n';
+                        data.insights.forEach(insight => {
+                            const title = insight.title || 'N/A';
+                            const value = insight.value || 'N/A';
+                            output += `| ${title} | ${value} |\n`;
+                        });
+                    } else {
+                        // Format as list
+                        data.insights.forEach(insight => {
+                            output += `• **${insight.title || 'N/A'}**: ${insight.value || 'N/A'}\n`;
+                        });
+                    }
+                }
+
+                // Add recommendations section if available
+                if (data.recommendations && data.recommendations.length > 0) {
+                    output += '\n\n---\n\n## 💡 Recommendations\n\n';
+                    data.recommendations.forEach(rec => {
+                        output += `• ${rec}\n`;
                     });
                 }
 
-                resultContent.textContent = output;
+                // Add summary section if available
+                if (data.summary) {
+                    output += '\n\n---\n\n## 📋 Summary\n\n';
+                    output += data.summary;
+                }
+
+                // Convert markdown to HTML and display
+                resultContent.innerHTML = markdownToHtml(output);
                 result.classList.add('show');
+                
+                // Scroll to result
+                result.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             } else {
-                resultContent.textContent = `Error: ${data.error || 'Unknown error occurred'}`;
+                resultContent.innerHTML = `<div style="color: #e74c3c; padding: 1rem; background: #fee; border-radius: var(--radius-md); border: 1px solid #e74c3c;">
+                    <strong>❌ Error:</strong> ${data.error || 'Unknown error occurred'}
+                </div>`;
                 result.classList.add('show');
             }
         } catch (error) {
-            resultContent.textContent = `Error: ${error.message}`;
+            resultContent.innerHTML = `<div style="color: #e74c3c; padding: 1rem; background: #fee; border-radius: var(--radius-md); border: 1px solid #e74c3c;">
+                <strong>❌ Error:</strong> ${error.message}
+            </div>`;
             result.classList.add('show');
         } finally {
             loading.classList.remove('show');
@@ -1266,7 +1461,6 @@
 
         const researchType = document.getElementById('research-type').value;
         const topic = document.getElementById('research-topic').value;
-        const contextInput = document.getElementById('research-context').value;
         const loading = document.getElementById('research-loading');
         const result = document.getElementById('research-result');
         const resultContent = document.getElementById('research-result-content');
@@ -1275,16 +1469,25 @@
         loading.classList.add('show');
         result.classList.remove('show');
 
-        // Parse context if provided
+        // Build context object from individual input fields
         let context = {};
-        if (contextInput.trim()) {
-            try {
-                context = JSON.parse(contextInput);
-            } catch (e) {
-                alert('Invalid JSON in context field. Please check the format.');
-                loading.classList.remove('show');
-                return;
-            }
+        
+        // Get competitors (comma-separated, convert to array)
+        const competitorsInput = document.getElementById('research-competitors').value.trim();
+        if (competitorsInput) {
+            context.competitors = competitorsInput.split(',').map(c => c.trim()).filter(c => c);
+        }
+        
+        // Get industry
+        const industryInput = document.getElementById('research-industry').value.trim();
+        if (industryInput) {
+            context.industry = industryInput;
+        }
+        
+        // Get geographic region
+        const regionInput = document.getElementById('research-region').value.trim();
+        if (regionInput) {
+            context.geographic_region = regionInput;
         }
 
         try {

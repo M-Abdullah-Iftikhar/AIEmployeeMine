@@ -195,28 +195,58 @@ def email_sending_status(request, campaign_id):
             if not next_step:
                 continue
 
-            reference_time = (
-                timezone.make_aware(datetime.combine(campaign.start_date, datetime.min.time()))
-                if contact.current_step == 0 and campaign.start_date
-                else contact.last_sent_at or campaign.created_at
-            )
+            # Calculate reference time for delay calculation
+            if contact.current_step == 0:
+                # First step: ALWAYS use current time (now) as reference
+                # This ensures delays are calculated from the current moment, not from old data
+                reference_time = now
+            else:
+                # Subsequent steps: use last_sent_at if available and recent, otherwise use now
+                if contact.last_sent_at and contact.last_sent_at <= now:
+                    # Check if last_sent_at is too old (more than 24 hours ago) - might be stale data
+                    time_since_last = now - contact.last_sent_at
+                    if time_since_last > timedelta(hours=24):
+                        # last_sent_at is too old, use current time instead
+                        reference_time = now
+                    else:
+                        # last_sent_at exists and is recent, use it
+                        reference_time = contact.last_sent_at
+                else:
+                    # No last_sent_at or it's in the future (data issue), use current time
+                    reference_time = now
 
             next_send_time = reference_time + timedelta(
                 days=next_step.delay_days,
                 hours=next_step.delay_hours,
                 minutes=next_step.delay_minutes,
             )
+            
+            # Final safeguard: if next_send_time is way in the past, recalculate from now
+            if next_send_time < now - timedelta(hours=1):
+                # Recalculate using current time as reference
+                reference_time = now
+                next_send_time = reference_time + timedelta(
+                    days=next_step.delay_days,
+                    hours=next_step.delay_hours,
+                    minutes=next_step.delay_minutes,
+                )
 
-            already_sent = EmailSendHistory.objects.filter(
+            # Check if email was already sent successfully
+            existing_email = EmailSendHistory.objects.filter(
                 campaign=campaign,
                 lead=contact.lead,
                 email_template=next_step.template,
-            ).exists()
+            ).first()
 
-            if already_sent:
+            # If email exists with successful status, skip it
+            if existing_email and existing_email.status in ['sent', 'delivered', 'opened', 'clicked']:
                 continue
 
+            # If email is ready to send (time has passed)
             if next_send_time <= now:
+                # Check if this is a retry (pending/failed email)
+                is_retry = existing_email and existing_email.status in ['pending', 'failed']
+                
                 pending_emails.append({
                     'recipient_email': contact.lead.email,
                     'subject': next_step.template.subject,
@@ -224,6 +254,8 @@ def email_sending_status(request, campaign_id):
                     'lead': contact.lead,
                     'sequence': sequence,
                     'next_step': next_step,
+                    'is_retry': is_retry,
+                    'previous_status': existing_email.status if existing_email else None,
                 })
             elif next_send_time <= horizon:
                 upcoming_sequence_sends.append({
@@ -231,9 +263,41 @@ def email_sending_status(request, campaign_id):
                     'sequence': sequence,
                     'next_step': next_step,
                     'next_send_time': next_send_time,
+                    'delay_days': next_step.delay_days,
+                    'delay_hours': next_step.delay_hours,
+                    'delay_minutes': next_step.delay_minutes,
                 })
 
     upcoming_sequence_sends.sort(key=lambda x: x['next_send_time'])
+
+    # Also include standalone EmailSendHistory records with status 'pending' or 'failed' that need retry
+    # These are emails that were attempted but didn't send successfully
+    pending_email_history = EmailSendHistory.objects.filter(
+        campaign=campaign,
+        status__in=['pending', 'failed'],
+        sent_at__isnull=True,  # Never successfully sent
+    ).select_related('lead', 'email_template')[:50]
+    
+    for email_history in pending_email_history:
+        # Check if this email is already in pending_emails list (from sequence logic above)
+        already_in_list = any(
+            e.get('lead') and email_history.lead and e['lead'].id == email_history.lead.id and
+            e.get('template') and email_history.email_template and e['template'].id == email_history.email_template.id
+            for e in pending_emails
+        )
+        
+        if not already_in_list and email_history.lead and email_history.email_template:
+            pending_emails.append({
+                'recipient_email': email_history.recipient_email,
+                'subject': email_history.subject,
+                'template': email_history.email_template,
+                'lead': email_history.lead,
+                'sequence': None,
+                'next_step': None,
+                'is_retry': True,
+                'previous_status': email_history.status,
+                'email_history_id': email_history.id,
+            })
 
     # Get replied contacts
     replied_contacts = CampaignContact.objects.filter(
@@ -496,17 +560,41 @@ def email_status_api(request, campaign_id):
             if not next_step:
                 continue
 
-            reference_time = (
-                timezone.make_aware(datetime.combine(campaign.start_date, datetime.min.time()))
-                if contact.current_step == 0 and campaign.start_date
-                else contact.last_sent_at or campaign.created_at
-            )
+            # Calculate reference time for delay calculation
+            if contact.current_step == 0:
+                # First step: ALWAYS use current time (now) as reference
+                # This ensures delays are calculated from the current moment, not from old data
+                reference_time = now
+            else:
+                # Subsequent steps: use last_sent_at if available and recent, otherwise use now
+                if contact.last_sent_at and contact.last_sent_at <= now:
+                    # Check if last_sent_at is too old (more than 24 hours ago) - might be stale data
+                    time_since_last = now - contact.last_sent_at
+                    if time_since_last > timedelta(hours=24):
+                        # last_sent_at is too old, use current time instead
+                        reference_time = now
+                    else:
+                        # last_sent_at exists and is recent, use it
+                        reference_time = contact.last_sent_at
+                else:
+                    # No last_sent_at or it's in the future (data issue), use current time
+                    reference_time = now
 
             next_send_time = reference_time + timedelta(
                 days=next_step.delay_days,
                 hours=next_step.delay_hours,
                 minutes=next_step.delay_minutes,
             )
+            
+            # Final safeguard: if next_send_time is way in the past, recalculate from now
+            if next_send_time < now - timedelta(hours=1):
+                # Recalculate using current time as reference
+                reference_time = now
+                next_send_time = reference_time + timedelta(
+                    days=next_step.delay_days,
+                    hours=next_step.delay_hours,
+                    minutes=next_step.delay_minutes,
+                )
 
             already_sent = EmailSendHistory.objects.filter(
                 campaign=campaign,
@@ -532,4 +620,63 @@ def email_status_api(request, campaign_id):
         'stats': stats,
         'recent_sequence_count': recent_sequence_count,
         'timestamp': now.isoformat(),
+    })
+
+
+@login_required
+def debug_sequence_times(request, campaign_id):
+    """Debug view to show actual database time values for sequences and sub-sequences"""
+    campaign = get_object_or_404(Campaign, id=campaign_id, owner=request.user)
+    now = timezone.now()
+    
+    contacts = CampaignContact.objects.filter(
+        campaign=campaign
+    ).select_related('lead', 'sequence', 'sub_sequence').order_by('-created_at')[:50]
+    
+    debug_data = []
+    for contact in contacts:
+        # Get all emails sent to this contact in this campaign
+        sent_emails = EmailSendHistory.objects.filter(
+            campaign=campaign,
+            lead=contact.lead
+        ).select_related('email_template').order_by('-sent_at', '-created_at')
+        
+        email_history = []
+        for email in sent_emails:
+            email_history.append({
+                'subject': email.subject,
+                'template_name': email.email_template.name if email.email_template else None,
+                'status': email.status,
+                'sent_at': email.sent_at.isoformat() if email.sent_at else None,
+                'created_at': email.created_at.isoformat(),
+                'delivered_at': email.delivered_at.isoformat() if email.delivered_at else None,
+                'opened_at': email.opened_at.isoformat() if email.opened_at else None,
+            })
+        
+        debug_data.append({
+            'lead_email': contact.lead.email,
+            'current_step': contact.current_step,
+            'sub_sequence_step': contact.sub_sequence_step,
+            'sequence_name': contact.sequence.name if contact.sequence else None,
+            'sub_sequence_name': contact.sub_sequence.name if contact.sub_sequence else None,
+            'last_sent_at': contact.last_sent_at.isoformat() if contact.last_sent_at else None,
+            'sub_sequence_last_sent_at': contact.sub_sequence_last_sent_at.isoformat() if contact.sub_sequence_last_sent_at else None,
+            'started_at': contact.started_at.isoformat() if contact.started_at else None,
+            'replied_at': contact.replied_at.isoformat() if contact.replied_at else None,
+            'created_at': contact.created_at.isoformat(),
+            'updated_at': contact.updated_at.isoformat(),
+            'completed': contact.completed,
+            'replied': contact.replied,
+            'time_since_last_sent': str(now - contact.last_sent_at) if contact.last_sent_at else None,
+            'time_since_sub_last_sent': str(now - contact.sub_sequence_last_sent_at) if contact.sub_sequence_last_sent_at else None,
+            'sent_emails': email_history,  # All emails actually sent to this contact
+            'total_emails_sent': len(email_history),
+        })
+    
+    return JsonResponse({
+        'success': True,
+        'campaign_id': campaign.id,
+        'campaign_name': campaign.name,
+        'current_time': now.isoformat(),
+        'contacts': debug_data,
     })
