@@ -729,13 +729,13 @@ def recruiter_email_settings(request):
             
             # Update fields if provided
             if 'followup_delay_hours' in data:
-                settings.followup_delay_hours = int(data['followup_delay_hours'])
+                settings.followup_delay_hours = float(data['followup_delay_hours'])
             if 'min_hours_between_followups' in data:
-                settings.min_hours_between_followups = int(data['min_hours_between_followups'])
+                settings.min_hours_between_followups = float(data['min_hours_between_followups'])
             if 'max_followup_emails' in data:
                 settings.max_followup_emails = int(data['max_followup_emails'])
             if 'reminder_hours_before' in data:
-                settings.reminder_hours_before = int(data['reminder_hours_before'])
+                settings.reminder_hours_before = float(data['reminder_hours_before'])
             if 'auto_send_followups' in data:
                 settings.auto_send_followups = bool(data['auto_send_followups'])
             if 'auto_send_reminders' in data:

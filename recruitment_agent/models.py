@@ -11,13 +11,13 @@ class RecruiterEmailSettings(models.Model):
     recruiter = models.OneToOneField(User, on_delete=models.CASCADE, related_name='recruiter_email_settings')
     
     # Follow-up email settings for PENDING interviews
-    followup_delay_hours = models.IntegerField(
+    followup_delay_hours = models.FloatField(
         default=48,
-        help_text="Hours to wait before sending first follow-up email for unconfirmed interviews"
+        help_text="Hours to wait before sending first follow-up email (e.g., 0.1 = 6 minutes, 1 = 1 hour)"
     )
-    min_hours_between_followups = models.IntegerField(
+    min_hours_between_followups = models.FloatField(
         default=24,
-        help_text="Minimum hours between follow-up emails"
+        help_text="Minimum hours between follow-up emails (e.g., 0.1 = 6 minutes, 1 = 1 hour)"
     )
     max_followup_emails = models.IntegerField(
         default=3,
@@ -25,9 +25,9 @@ class RecruiterEmailSettings(models.Model):
     )
     
     # Reminder email settings for SCHEDULED interviews
-    reminder_hours_before = models.IntegerField(
+    reminder_hours_before = models.FloatField(
         default=24,
-        help_text="Hours before scheduled interview to send reminder email"
+        help_text="Hours before scheduled interview to send reminder (e.g., 0.5 = 30 minutes, 1 = 1 hour)"
     )
     
     # Additional settings
@@ -168,10 +168,10 @@ class Interview(models.Model):
     recruiter = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='scheduled_interviews')
     
     # Recruiter Email Timing Preferences (configurable per interview, defaults from RecruiterEmailSettings)
-    followup_delay_hours = models.IntegerField(default=48, help_text="Hours to wait before sending first follow-up email for PENDING interviews")
-    reminder_hours_before = models.IntegerField(default=24, help_text="Hours before scheduled interview to send reminder email")
+    followup_delay_hours = models.FloatField(default=48, help_text="Hours to wait before sending first follow-up email (e.g., 0.1 = 6 minutes)")
+    reminder_hours_before = models.FloatField(default=24, help_text="Hours before scheduled interview to send reminder (e.g., 0.5 = 30 minutes)")
     max_followup_emails = models.IntegerField(default=3, help_text="Maximum number of follow-up emails to send")
-    min_hours_between_followups = models.IntegerField(default=24, help_text="Minimum hours between follow-up emails")
+    min_hours_between_followups = models.FloatField(default=24, help_text="Minimum hours between follow-up emails (e.g., 0.1 = 6 minutes)")
     
     # Timestamps
     invitation_sent_at = models.DateTimeField(null=True, blank=True)

@@ -8,12 +8,10 @@ urlpatterns = [
     path('api/interviews/schedule/', views.schedule_interview, name='schedule_interview'),
     path('api/interviews/<int:interview_id>/', views.get_interview_details, name='get_interview_details'),
     path('api/interviews/confirm/', views.confirm_interview_slot, name='confirm_interview_slot'),
-    # Automatic follow-up email checking (can be called by cron/scheduled tasks)
-    # TODO: Implement auto_check_interview_followups view
-    # path('api/interviews/auto-check/', views.auto_check_interview_followups, name='auto_check_interview_followups'),
+    # Automatic follow-up email checking (can be called by cron/scheduled tasks or manually)
+    path('api/interviews/auto-check/', views.auto_check_interview_followups, name='auto_check_interview_followups'),
     # Recruiter email settings
-    # TODO: Implement recruiter_email_settings view
-    # path('api/recruiter/email-settings/', views.recruiter_email_settings, name='recruiter_email_settings'),
+    path('api/recruiter/email-settings/', views.recruiter_email_settings, name='recruiter_email_settings'),
     path('api/interviews/', views.list_interviews, name='list_interviews'),
     # Job Description endpoints
     path('api/job-descriptions/', views.list_job_descriptions, name='list_job_descriptions'),

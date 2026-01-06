@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 # Track last check time to avoid checking on every request
 _last_check_time = None
 _check_lock = threading.Lock()
-CHECK_INTERVAL = timedelta(minutes=30)  # Check every 30 minutes
+CHECK_INTERVAL = timedelta(minutes=2)  # Check every 2 minutes (reduced for testing small intervals like 0.1 hours)
 
 
 class AutoInterviewFollowupMiddleware:
