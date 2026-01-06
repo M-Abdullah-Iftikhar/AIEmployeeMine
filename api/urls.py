@@ -1,4 +1,4 @@
-from django.urls import path, include
+from django.urls import path, include, re_path
 from rest_framework.routers import DefaultRouter
 
 from api.views import auth
@@ -68,7 +68,7 @@ urlpatterns = [
     path('reviews/summary/', review.get_reviews_summary, name='get_reviews_summary'),
     
     # Contact endpoints
-    path('contact/', contact.submit_contact_form, name='submit_contact_form'),
+    re_path(r'^contact/?$', contact.submit_contact_form, name='submit_contact_form'),
     path('contact/complaints/', contact.submit_complaint, name='submit_complaint'),
     path('contact/admin/', contact.list_contact_messages, name='list_contact_messages'),
     path('contact/admin/<int:id>/', contact.get_contact_message, name='get_contact_message'),
@@ -117,7 +117,7 @@ urlpatterns = [
     path('company/login/', company_auth.login_company_user, name='login_company_user'),
     
     # Career endpoints
-    path('careers/positions/', career.list_job_positions, name='list_job_positions'),
+    re_path(r'^careers/positions/?$', career.list_job_positions, name='list_job_positions'),
     path('careers/applications/', career.submit_career_application, name='submit_career_application'),  # POST
     path('careers/admin/applications/', career.list_career_applications, name='list_career_applications'),  # GET (admin)
     path('careers/admin/applications/<int:id>/', career.get_career_application, name='get_career_application'),  # GET (admin)
