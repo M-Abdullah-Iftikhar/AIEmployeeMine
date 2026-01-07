@@ -298,6 +298,16 @@ class Command(BaseCommand):
         lead = contact.lead
         self.stdout.write(f'\n   Main Sequence Contact: {lead.email}')
         
+        # SAFETY CHECK: If contact has replied, stop main sequence immediately
+        # This prevents race conditions where reply was marked after query but before processing
+        if contact.replied:
+            self.stdout.write(
+                self.style.WARNING(
+                    f'     Contact {lead.email} has replied (interest: {contact.reply_interest_level or "N/A"}) - stopping main sequence'
+                )
+            )
+            return 'stopped'
+        
         # Determine which sequence to use
         sequence = contact.sequence
         if not sequence:
@@ -500,9 +510,10 @@ class Command(BaseCommand):
         send_reason = ''
         
         if contact.current_step == 0:
-            # First step - ALWAYS use current time as reference
-            # This ensures delays are calculated from now, not from old campaign dates
-            reference_time = timezone.now()
+            # First step - use contact creation time or started_at as reference
+            # This ensures delays are calculated from when contact was added, not from current time
+            # If started_at is set, use it; otherwise use created_at
+            reference_time = contact.started_at if contact.started_at else contact.created_at
             
             delay = timedelta(
                 days=next_step.delay_days,
@@ -510,20 +521,21 @@ class Command(BaseCommand):
                 minutes=next_step.delay_minutes
             )
             
+            # Calculate send_time from reference_time
+            send_time = reference_time + delay
+            
             # For step 0, if delay is 0 or very small (≤ 1 minute), send immediately
-            # Otherwise, calculate send_time and check if we should wait
             if delay.total_seconds() <= 60:  # 1 minute or less
                 should_send = True
                 send_reason = f'First step (delay: {delay.total_seconds()}s - sending immediately)'
+            elif timezone.now() >= send_time:
+                # Enough time has passed since contact was added
+                should_send = True
+                send_reason = f'First step delay passed (reference: {reference_time}, send_time: {send_time})'
             else:
-                # For longer delays, calculate send_time from current time
-                send_time = reference_time + delay
-                if timezone.now() >= send_time:
-                    should_send = True
-                    send_reason = f'First step delay passed (reference: {reference_time})'
-                else:
-                    time_remaining = send_time - timezone.now()
-                    self.stdout.write(f'    Waiting for first step: {time_remaining} remaining (delay: {delay})')
+                # Still waiting for the delay to pass
+                time_remaining = send_time - timezone.now()
+                self.stdout.write(f'    Waiting for first step: {time_remaining} remaining (delay: {delay}, reference: {reference_time}, send_time: {send_time})')
         else:
             # Subsequent steps - check delay from last sent
             if not contact.last_sent_at:

@@ -699,6 +699,61 @@ class CampaignContact(models.Model):
         self.save()
 
 
+class Reply(models.Model):
+    """Stores multiple replies from a contact - allows reply history"""
+    INTEREST_LEVEL_CHOICES = [
+        ('positive', 'Positive/Interested'),
+        ('negative', 'Negative/Not Interested'),
+        ('neutral', 'Neutral'),
+        ('requested_info', 'Requested More Information'),
+        ('objection', 'Has Objection/Concern'),
+        ('unsubscribe', 'Unsubscribe Request'),
+        ('not_analyzed', 'Not Analyzed'),
+    ]
+    
+    contact = models.ForeignKey(CampaignContact, on_delete=models.CASCADE, related_name='replies')
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='replies')
+    lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name='replies')
+    
+    # Link to sequence - which sequence email triggered this reply
+    sequence = models.ForeignKey('EmailSequence', on_delete=models.SET_NULL, null=True, blank=True,
+                                related_name='replies',
+                                help_text='The sequence that the replied-to email belongs to')
+    sub_sequence = models.ForeignKey('EmailSequence', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='sub_sequence_replies',
+                                    help_text='The sub-sequence that the replied-to email belongs to (if any)')
+    
+    # Reply Details
+    reply_subject = models.CharField(max_length=500, blank=True)
+    reply_content = models.TextField(blank=True)
+    replied_at = models.DateTimeField(default=timezone.now)
+    
+    # AI Analysis
+    interest_level = models.CharField(max_length=20, choices=INTEREST_LEVEL_CHOICES, default='not_analyzed')
+    analysis = models.TextField(blank=True)
+    
+    # Which email triggered this reply (optional)
+    triggering_email = models.ForeignKey('EmailSendHistory', on_delete=models.SET_NULL, null=True, blank=True,
+                                        related_name='triggered_replies',
+                                        help_text='The email that this reply was responding to')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-replied_at']
+        indexes = [
+            models.Index(fields=['contact', '-replied_at']),
+            models.Index(fields=['campaign', '-replied_at']),
+            models.Index(fields=['lead', '-replied_at']),
+            models.Index(fields=['sequence', '-replied_at']),
+            models.Index(fields=['campaign', 'sequence', '-replied_at']),
+        ]
+    
+    def __str__(self):
+        return f"Reply from {self.lead.email} on {self.replied_at.strftime('%Y-%m-%d %H:%M')} ({self.get_interest_level_display()})"
+
+
 # Signal to automatically create CampaignContact when leads are added to campaigns
 # @receiver(m2m_changed, sender=Campaign.leads.through)
 # def create_campaign_contact(sender, instance, action, pk_set, **kwargs):

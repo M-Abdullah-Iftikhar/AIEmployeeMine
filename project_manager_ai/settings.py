@@ -238,6 +238,12 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+
+def _startup_print(*args, **kwargs):
+    """Print once when Django's autoreloader is enabled."""
+    if os.environ.get('RUN_MAIN') == 'true':
+        print(*args, **kwargs)
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = 'django-insecure-9hce6%w7!*)lb#$^6)gb8!h01#6t6y_85nn=exz82l4dj=6q45'
@@ -300,21 +306,56 @@ WSGI_APPLICATION = 'project_manager_ai.wsgi.application'
 
 
 # --------------------
-# Database (SQL Server Express)
+# Database
 # --------------------
 
+# Default to SQLite for local development unless explicitly overridden.
+# Set `USE_SQL_SERVER=true` in your environment to enable SQL Server.
+USE_SQL_SERVER = os.getenv('USE_SQL_SERVER', 'False').strip().lower() == 'true'
 
-DATABASES = {
-    'default': {
+if USE_SQL_SERVER:
+    USE_WINDOWS_AUTH = os.getenv('USE_WINDOWS_AUTH', 'True').strip().lower() == 'true'
+
+    # For named instances, set DB_HOST like: localhost\\SQLEXPRESS
+    # For a default instance, set DB_HOST=localhost and (optionally) DB_PORT=1433
+    db_host = os.getenv('DB_HOST', r'localhost\\SQLEXPRESS').strip()
+    db_port = os.getenv('DB_PORT', '').strip()
+
+    extra_params_parts: list[str] = []
+    if USE_WINDOWS_AUTH:
+        extra_params_parts.append('Trusted_Connection=yes')
+    # Common dev-friendly setting; remove/adjust for production SSL.
+    extra_params_parts.append('TrustServerCertificate=yes')
+    extra_params = ';'.join(extra_params_parts)
+    if extra_params and not extra_params.endswith(';'):
+        extra_params += ';'
+
+    db_config = {
         'ENGINE': 'mssql',
-        'NAME': os.getenv('DB_NAME', 'project_manager_db'),
-        'HOST': r'localhost\SQLEXPRESS',
+        'NAME': os.getenv('DB_NAME', 'project_manager_db').strip(),
+        'HOST': db_host,
         'OPTIONS': {
-            'driver': 'ODBC Driver 17 for SQL Server',
-            'trusted_connection': 'yes',
+            'driver': os.getenv('DB_DRIVER', 'ODBC Driver 17 for SQL Server').strip(),
+            'extra_params': extra_params,
         },
+    }
 
-    }}
+    # Only set PORT if provided (named instances typically omit PORT)
+    if db_port:
+        db_config['PORT'] = db_port
+
+    if not USE_WINDOWS_AUTH:
+        db_config['USER'] = os.getenv('DB_USER', '').strip()
+        db_config['PASSWORD'] = os.getenv('DB_PASSWORD', '').strip()
+
+    DATABASES = {'default': db_config}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 
@@ -392,29 +433,29 @@ if email_backend_env and ('smtp' in email_backend_env.lower() or 'EmailBackend' 
     
     # Verify SMTP settings are configured
     if not EMAIL_HOST_USER or not EMAIL_HOST_PASSWORD:
-        print("\n" + "="*60)
-        print("WARNING: SMTP backend requested but EMAIL_HOST_USER or EMAIL_HOST_PASSWORD not set!")
-        print("Falling back to console backend (emails will print to terminal)")
-        print("="*60 + "\n")
+        _startup_print("\n" + "="*60)
+        _startup_print("WARNING: SMTP backend requested but EMAIL_HOST_USER or EMAIL_HOST_PASSWORD not set!")
+        _startup_print("Falling back to console backend (emails will print to terminal)")
+        _startup_print("="*60 + "\n")
         EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
     else:
-        print("\n" + "="*60)
-        print("EMAIL CONFIGURATION:")
-        print(f"  Backend: SMTP")
-        print(f"  Host: {EMAIL_HOST}")
-        print(f"  Port: {EMAIL_PORT}")
-        print(f"  From: {EMAIL_HOST_USER}")
-        print("="*60 + "\n")
+        _startup_print("\n" + "="*60)
+        _startup_print("EMAIL CONFIGURATION:")
+        _startup_print(f"  Backend: SMTP")
+        _startup_print(f"  Host: {EMAIL_HOST}")
+        _startup_print(f"  Port: {EMAIL_PORT}")
+        _startup_print(f"  From: {EMAIL_HOST_USER}")
+        _startup_print("="*60 + "\n")
 else:
     # Console backend (for development - emails print to terminal)
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-    print("\n" + "="*60)
-    print("INFO: Using console email backend (emails will print to terminal)")
-    print("To send actual emails, set in .env:")
-    print("  EMAIL_BACKEND=smtp")
-    print("  EMAIL_HOST_USER=your-email@gmail.com")
-    print("  EMAIL_HOST_PASSWORD=your-app-password")
-    print("="*60 + "\n")
+    _startup_print("\n" + "="*60)
+    _startup_print("INFO: Using console email backend (emails will print to terminal)")
+    _startup_print("To send actual emails, set in .env:")
+    _startup_print("  EMAIL_BACKEND=smtp")
+    _startup_print("  EMAIL_HOST_USER=your-email@gmail.com")
+    _startup_print("  EMAIL_HOST_PASSWORD=your-app-password")
+    _startup_print("="*60 + "\n")
 
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER if EMAIL_HOST_USER else 'noreply@example.com').strip()
 RECRUITER_EMAIL = os.getenv('RECRUITER_EMAIL', '').strip()

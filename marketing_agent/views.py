@@ -1120,13 +1120,13 @@ def upload_leads(request, campaign_id):
                     if not contact:
                         # Create new contact if it doesn't exist
                         contact = CampaignContact.objects.create(
-                            campaign=campaign,
-                            lead=lead,
+                    campaign=campaign,
+                    lead=lead,
                             sequence=campaign.email_sequences.filter(is_active=True).first(),
                             current_step=0,
                             started_at=timezone.now(),
                         )
-                        contacts_created += 1
+                    contacts_created += 1
                 except MultipleObjectsReturned:
                     # If duplicates exist, just use the first one (already exists)
                     pass
@@ -1327,7 +1327,7 @@ def mark_contact_replied(request, campaign_id, lead_id):
     lead = get_object_or_404(Lead, id=lead_id, owner=request.user)
     
     try:
-        from marketing_agent.models import CampaignContact
+        from marketing_agent.models import CampaignContact, EmailSequence
         from marketing_agent.utils.reply_analyzer import ReplyAnalyzer
         
         # Get or create contact (handle multiple contacts per campaign/lead - use first one or create)
@@ -1389,7 +1389,59 @@ def mark_contact_replied(request, campaign_id, lead_id):
                 sub_sequence = sub_sequences.first()
                 logger.info(f"Found sub-sequence '{sub_sequence.name}' for contact {lead.email} after reply")
         
+        # Create Reply record to preserve reply history (don't overwrite previous replies)
+        # Use try/except in case Reply model doesn't exist yet (migration not applied)
+        try:
+            from marketing_agent.models import Reply, EmailSendHistory
+            # Try to find the most recent email sent to this lead (the one likely triggering this reply)
+            triggering_email = EmailSendHistory.objects.filter(
+                campaign=campaign,
+                lead=lead
+            ).order_by('-sent_at').first()
+            
+            # Determine which sequence this reply is for
+            reply_sequence = None
+            reply_sub_sequence = None
+            
+            if triggering_email and triggering_email.email_template:
+                # Find which sequence this email template belongs to
+                # Check if it's part of a sequence step
+                sequence_steps = triggering_email.email_template.sequence_steps.all()
+                if sequence_steps.exists():
+                    seq_step = sequence_steps.first()
+                    reply_sequence = seq_step.sequence
+                    # Check if it's a sub-sequence
+                    if reply_sequence and reply_sequence.is_sub_sequence:
+                        reply_sub_sequence = reply_sequence
+                        reply_sequence = reply_sequence.parent_sequence  # Main sequence
+                else:
+                    # Fallback: use contact's current sequence
+                    reply_sequence = contact.sequence
+            else:
+                # Fallback: use contact's current sequence
+                reply_sequence = contact.sequence
+            
+            reply_record = Reply.objects.create(
+                contact=contact,
+                campaign=campaign,
+                lead=lead,
+                sequence=reply_sequence,
+                sub_sequence=reply_sub_sequence,
+                reply_subject=reply_subject,
+                reply_content=reply_content,
+                interest_level=interest_level,
+                analysis=analysis,
+                triggering_email=triggering_email,
+                replied_at=timezone.now()
+            )
+            logger.info(f"Created Reply record #{reply_record.id} for {lead.email} (sequence: {reply_sequence.name if reply_sequence else 'None'})")
+        except (ImportError, AttributeError, Exception) as e:
+            # Reply model doesn't exist yet or migration not applied - skip creating Reply record
+            # Still update CampaignContact (backward compatibility)
+            logger.warning(f'Could not create Reply record (model may not exist yet): {str(e)}')
+        
         # Mark as replied with AI analysis and start sub-sequence if available
+        # This still updates CampaignContact with the latest reply (for backward compatibility)
         contact.mark_replied(
             reply_subject=reply_subject,
             reply_content=reply_content,

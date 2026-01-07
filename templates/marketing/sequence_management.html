@@ -1047,7 +1047,7 @@
                             const interestSelect = document.getElementById('sub-sequence-interest-level');
                             if (interestSelect && seq.interest_level) {
                                 interestSelect.value = seq.interest_level;
-                                interestSelect.disabled = true; // Can't change interest level in edit mode
+                                interestSelect.disabled = false; // Allow editing interest level
                             }
                         } else {
                             currentParentSequenceId = null;

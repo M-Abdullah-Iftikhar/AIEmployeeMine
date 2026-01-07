@@ -1,6 +1,7 @@
 """
 Views for Email Sending Status and Monitoring
 """
+import logging
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
@@ -8,6 +9,8 @@ from django.utils import timezone
 from datetime import timedelta, datetime
 
 from .models import Campaign, CampaignContact, EmailSendHistory, EmailSequence
+
+logger = logging.getLogger(__name__)
 
 
 # @login_required
@@ -197,9 +200,10 @@ def email_sending_status(request, campaign_id):
 
             # Calculate reference time for delay calculation
             if contact.current_step == 0:
-                # First step: ALWAYS use current time (now) as reference
-                # This ensures delays are calculated from the current moment, not from old data
-                reference_time = now
+                # First step: use contact creation time or started_at as reference
+                # This ensures delays are calculated from when contact was added, not from current time
+                # If started_at is set, use it; otherwise use created_at
+                reference_time = contact.started_at if contact.started_at else contact.created_at
             else:
                 # Subsequent steps: use last_sent_at if available and recent, otherwise use now
                 if contact.last_sent_at and contact.last_sent_at <= now:
@@ -221,9 +225,15 @@ def email_sending_status(request, campaign_id):
                 minutes=next_step.delay_minutes,
             )
             
-            # Final safeguard: if next_send_time is way in the past, recalculate from now
-            if next_send_time < now - timedelta(hours=1):
-                # Recalculate using current time as reference
+            # Final safeguard: if next_send_time is in the past (for step 0, this means delay already passed)
+            # For step 0, if send_time is in the past, it's ready to send (don't recalculate)
+            # For subsequent steps, if send_time is way in the past, recalculate from now
+            if contact.current_step == 0:
+                # For step 0, if send_time is in the past, it means the delay has passed - ready to send
+                # Don't recalculate, just let it be ready
+                pass
+            elif next_send_time < now - timedelta(hours=1):
+                # For subsequent steps, if send_time is way in the past, recalculate from now
                 reference_time = now
                 next_send_time = reference_time + timedelta(
                     days=next_step.delay_days,
@@ -299,7 +309,37 @@ def email_sending_status(request, campaign_id):
                 'email_history_id': email_history.id,
             })
 
-    # Get replied contacts
+    # Get all replies (from Reply model) - shows all reply history, not just latest
+    # Use try/except in case Reply model doesn't exist yet (migration not applied)
+    all_replies = []
+    replies_by_sequence = {}  # Organize replies by sequence
+    try:
+        from marketing_agent.models import Reply
+        all_replies = list(Reply.objects.filter(
+            campaign=campaign
+        ).select_related('lead', 'contact', 'sequence', 'sub_sequence').order_by('-replied_at')[:100])
+        
+        # Organize replies by sequence
+        for reply in all_replies:
+            seq_key = reply.sequence.id if reply.sequence else 'no_sequence'
+            if seq_key not in replies_by_sequence:
+                replies_by_sequence[seq_key] = {
+                    'sequence': reply.sequence,
+                    'sequence_name': reply.sequence.name if reply.sequence else 'No Sequence',
+                    'replies': []
+                }
+            replies_by_sequence[seq_key]['replies'].append(reply)
+    except (ImportError, AttributeError, Exception) as e:
+        # Reply model doesn't exist yet, migration not applied, or database error - use empty list
+        # This allows the page to still load using replied_contacts as fallback
+        try:
+            logger.warning(f'Reply model not available: {str(e)}')
+        except:
+            pass  # Logger might not be available
+        all_replies = []
+        replies_by_sequence = {}
+    
+    # Get replied contacts (for backward compatibility and quick stats)
     replied_contacts = CampaignContact.objects.filter(
         campaign=campaign,
         replied=True
@@ -316,20 +356,25 @@ def email_sending_status(request, campaign_id):
         replied_contacts_dict[contact.lead_id] = contact
     
     # Find emails that were sent BEFORE each reply was received
-    # Only show "Replied" on emails sent BEFORE the reply timestamp (not after)
+    # Only show "Replied" on the MOST RECENT email sent before the reply (the one most likely to have triggered it)
     replied_email_ids = set()
     for lead_id, contact in replied_contacts_dict.items():
-        if contact.replied_at:
+        # Use replied_at if available, otherwise use updated_at as fallback
+        reply_timestamp = contact.replied_at if contact.replied_at else contact.updated_at
+        
+        if reply_timestamp:
             # Only find emails that were sent BEFORE the reply was received
             # This ensures we don't show "Replied" on emails sent after the reply
             triggering_emails = all_email_history_queryset.filter(
                 lead_id=lead_id,
-                sent_at__lt=contact.replied_at,  # Use __lt (less than) not __lte to exclude emails sent at exact same time
-                sent_at__gte=contact.replied_at - timedelta(days=30)  # Within 30 days before reply
-            )
+                sent_at__lt=reply_timestamp,  # Use __lt (less than) not __lte to exclude emails sent at exact same time
+                sent_at__gte=reply_timestamp - timedelta(days=30)  # Within 30 days before reply
+            ).order_by('-sent_at')  # Order by most recent first
             
-            for email in triggering_emails:
-                replied_email_ids.add(email.id)
+            # Only mark the MOST RECENT email as replied (the one most likely to have triggered the reply)
+            if triggering_emails.exists():
+                most_recent_email = triggering_emails.first()
+                replied_email_ids.add(most_recent_email.id)
     
     # Check which sequences are sub-sequences for identifying email types
     sub_sequence_ids = set(
@@ -411,13 +456,69 @@ def email_sending_status(request, campaign_id):
         }
         recent_sequence_emails_list.append(email_dict)
     
+    # Organize email history by sequence
+    emails_by_sequence = {}
+    for email_data in all_email_history_list:
+        email = email_data['email']
+        sequence = None
+        
+        # Determine which sequence this email belongs to
+        if email.email_template:
+            sequence_steps = email.email_template.sequence_steps.all()
+            if sequence_steps.exists():
+                seq_step = sequence_steps.first()
+                sequence = seq_step.sequence
+                # If it's a sub-sequence, use parent sequence for grouping
+                if sequence and sequence.is_sub_sequence and sequence.parent_sequence:
+                    sequence = sequence.parent_sequence
+        
+        seq_key = sequence.id if sequence else 'no_sequence'
+        if seq_key not in emails_by_sequence:
+            emails_by_sequence[seq_key] = {
+                'sequence': sequence,
+                'sequence_name': sequence.name if sequence else 'No Sequence',
+                'emails': []
+            }
+        emails_by_sequence[seq_key]['emails'].append(email_data)
+    
+    # Organize pending emails by sequence
+    pending_by_sequence = {}
+    for email_data in pending_emails:
+        sequence = email_data.get('sequence')
+        seq_key = sequence.id if sequence else 'no_sequence'
+        if seq_key not in pending_by_sequence:
+            pending_by_sequence[seq_key] = {
+                'sequence': sequence,
+                'sequence_name': sequence.name if sequence else 'No Sequence',
+                'emails': []
+            }
+        pending_by_sequence[seq_key]['emails'].append(email_data)
+    
+    # Organize upcoming emails by sequence
+    upcoming_by_sequence = {}
+    for email_data in upcoming_sequence_sends:
+        sequence = email_data.get('sequence')
+        seq_key = sequence.id if sequence else 'no_sequence'
+        if seq_key not in upcoming_by_sequence:
+            upcoming_by_sequence[seq_key] = {
+                'sequence': sequence,
+                'sequence_name': sequence.name if sequence else 'No Sequence',
+                'emails': []
+            }
+        upcoming_by_sequence[seq_key]['emails'].append(email_data)
+    
     context = {
         'campaign': campaign,
         'all_email_history': all_email_history_list,  # Now includes replied/sequence info
+        'emails_by_sequence': emails_by_sequence,  # Emails organized by sequence
         'sequence_emails': recent_sequence_emails_list,  # Now includes replied/sequence info
         'pending_emails': pending_emails,
+        'pending_by_sequence': pending_by_sequence,  # Pending emails organized by sequence
         'upcoming_sequence_sends': upcoming_sequence_sends,
-        'replied_contacts': replied_contacts,
+        'upcoming_by_sequence': upcoming_by_sequence,  # Upcoming emails organized by sequence
+        'replied_contacts': replied_contacts,  # For backward compatibility
+        'all_replies': all_replies,  # All reply history from Reply model
+        'replies_by_sequence': replies_by_sequence,  # Replies organized by sequence
         'stats': email_stats,
         'currently_sending': {
             'sequences': len(pending_emails) > 0 or currently_sending_emails,
@@ -562,9 +663,10 @@ def email_status_api(request, campaign_id):
 
             # Calculate reference time for delay calculation
             if contact.current_step == 0:
-                # First step: ALWAYS use current time (now) as reference
-                # This ensures delays are calculated from the current moment, not from old data
-                reference_time = now
+                # First step: use contact creation time or started_at as reference
+                # This ensures delays are calculated from when contact was added, not from current time
+                # If started_at is set, use it; otherwise use created_at
+                reference_time = contact.started_at if contact.started_at else contact.created_at
             else:
                 # Subsequent steps: use last_sent_at if available and recent, otherwise use now
                 if contact.last_sent_at and contact.last_sent_at <= now:
@@ -586,9 +688,15 @@ def email_status_api(request, campaign_id):
                 minutes=next_step.delay_minutes,
             )
             
-            # Final safeguard: if next_send_time is way in the past, recalculate from now
-            if next_send_time < now - timedelta(hours=1):
-                # Recalculate using current time as reference
+            # Final safeguard: if next_send_time is in the past (for step 0, this means delay already passed)
+            # For step 0, if send_time is in the past, it's ready to send (don't recalculate)
+            # For subsequent steps, if send_time is way in the past, recalculate from now
+            if contact.current_step == 0:
+                # For step 0, if send_time is in the past, it means the delay has passed - ready to send
+                # Don't recalculate, just let it be ready
+                pass
+            elif next_send_time < now - timedelta(hours=1):
+                # For subsequent steps, if send_time is way in the past, recalculate from now
                 reference_time = now
                 next_send_time = reference_time + timedelta(
                     days=next_step.delay_days,

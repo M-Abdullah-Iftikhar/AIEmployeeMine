@@ -396,12 +396,12 @@
                     <span>💬</span> Ask a Marketing Question <span class="required-field">*</span>
                 </label>
                 <div style="position: relative;">
-                    <textarea id="qa-question" name="question"
+                <textarea id="qa-question" name="question"
                         placeholder="Type your question here or select from suggested questions below..."
                         required
                         style="width: 100%; padding: 0.75rem; border: 2px solid var(--border-color); border-radius: var(--radius-md); font-size: 1rem; resize: vertical; min-height: 120px;"
                     ></textarea>
-                </div>
+            </div>
                 <div class="field-hint">Type your question or select from suggested questions below</div>
             </div>
 
@@ -1407,7 +1407,7 @@
                         // Format as table for better readability
                         output += '| Metric | Value |\n';
                         output += '|--------|-------|\n';
-                        data.insights.forEach(insight => {
+                    data.insights.forEach(insight => {
                             const title = insight.title || 'N/A';
                             const value = insight.value || 'N/A';
                             output += `| ${title} | ${value} |\n`;
@@ -1416,8 +1416,8 @@
                         // Format as list
                         data.insights.forEach(insight => {
                             output += `• **${insight.title || 'N/A'}**: ${insight.value || 'N/A'}\n`;
-                        });
-                    }
+                    });
+                }
                 }
 
                 // Add recommendations section if available
