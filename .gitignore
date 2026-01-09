@@ -2,6 +2,8 @@
 .env  HEAD
 .env
 
+
+
 # Python cache
 __pycache__/
 *.pyc
@@ -111,6 +113,10 @@ db.sqlite3-journal
 /mediafiles/
 /static/
 
+    # Django settings (project-specific configurations)
+project_manager_ai/settings.py
+**/settings.py
+
 # Logs and log files
 logs/
 **/logs/
@@ -155,3 +161,5 @@ desktop.ini
 
 #project_manager_ai
 project_manager_ai/settings.py
+# Frontend directory
+PaPerProjectFront/

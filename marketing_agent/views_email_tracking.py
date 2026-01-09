@@ -11,13 +11,6 @@ from django.urls import reverse
 from urllib.parse import unquote
 import logging
 
-# Setup logging for tracking
-try:
-    from .logging_config import setup_marketing_tracking_logging
-    setup_marketing_tracking_logging()
-except ImportError:
-    pass  # Fallback to default logging if config not available
-
 from .models import EmailSendHistory
 
 logger = logging.getLogger(__name__)

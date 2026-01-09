@@ -13,13 +13,6 @@ from datetime import timedelta
 from typing import Dict, Optional, List
 import logging
 
-# Setup logging for email service
-try:
-    from marketing_agent.logging_config import setup_marketing_tracking_logging
-    setup_marketing_tracking_logging()
-except ImportError:
-    pass  # Fallback to default logging if config not available
-
 logger = logging.getLogger(__name__)
 
 
