@@ -469,14 +469,6 @@ else:
     _startup_print("  EMAIL_HOST_PASSWORD=your-app-password")
     _startup_print("="*60 + "\n")
 
-
-
-# --------------------
-# Email Tracking Configuration
-# --------------------
-# Base URL for email tracking (opens/clicks)
-# For local testing with ngrok, use your ngrok URL
-# For production, use your actual domain
 SITE_URL = os.getenv('SITE_URL', 'https://fiddly-uncouth-ryan.ngrok-free.dev')
 
 
