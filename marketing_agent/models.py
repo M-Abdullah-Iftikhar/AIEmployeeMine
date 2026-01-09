@@ -464,9 +464,12 @@ class EmailSendHistory(models.Model):
         import hashlib
         import secrets
         from django.conf import settings
-        # Use ID + secret salt + random for uniqueness
+        from django.utils import timezone
+        # Use ID (if available), email, timestamp, secret salt + random for uniqueness
         salt = getattr(settings, 'SECRET_KEY', 'default-secret')
-        unique_str = f"{self.id}-{self.recipient_email}-{salt}-{secrets.token_hex(8)}"
+        obj_id = self.id if self.id else 0
+        timestamp = timezone.now().isoformat()
+        unique_str = f"{obj_id}-{self.recipient_email}-{timestamp}-{salt}-{secrets.token_hex(8)}"
         token = hashlib.sha256(unique_str.encode()).hexdigest()[:32]
         return token
     
