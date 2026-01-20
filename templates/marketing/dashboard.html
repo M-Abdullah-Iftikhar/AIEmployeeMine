@@ -257,17 +257,17 @@
                 <thead>
                     <tr style="border-bottom: 2px solid var(--border-color);">
                         <th style="padding: 0.75rem; text-align: left;">Name</th>
-                        <th style="padding: 0.75rem; text-align: left;">Type</th>
+                        <!-- <th style="padding: 0.75rem; text-align: left;">Type</th> -->
                         <th style="padding: 0.75rem; text-align: left;">Status</th>
-                        <th style="padding: 0.75rem; text-align: right;">Budget</th>
-                        <th style="padding: 0.75rem; text-align: right;">Spent</th>
+                        <!-- <th style="padding: 0.75rem; text-align: right;">Budget</th> -->
+                        <th style="padding: 0.75rem; text-align: right;">View </th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for campaign in campaigns %}
                     <tr style="border-bottom: 1px solid var(--border-color); cursor: pointer;" onclick="window.location.href='{% url 'campaign_detail' campaign.id %}'">
                         <td style="padding: 0.75rem;">{{ campaign.name }}</td>
-                        <td style="padding: 0.75rem;">{{ campaign.get_campaign_type_display }}</td>
+                        <!-- <td style="padding: 0.75rem;">{{ campaign.get_campaign_type_display }}</td> -->
                         <td style="padding: 0.75rem;">
                             <span style="padding: 0.25rem 0.75rem; border-radius: var(--radius-md); font-size: 0.85rem; 
                                 {% if campaign.status == 'active' %}background: var(--success-color); color: white;
@@ -278,8 +278,9 @@
                                 {{ campaign.get_status_display }}
                             </span>
                         </td>
-                        <td style="padding: 0.75rem; text-align: right;">${{ campaign.budget|floatformat:2 }}</td>
-                        <td style="padding: 0.75rem; text-align: right;">${{ campaign.actual_spend|floatformat:2 }}</td>
+                        <!-- <td style="padding: 0.75rem; text-align: right;">${{ campaign.budget|floatformat:2 }}</td> -->
+                        <td style="padding: 0.75rem; text-align: right;"><a href="{% url 'campaign_detail' campaign.id %}" style="text-decoration: none; color: var(--primary-color);">View →</a></td>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
