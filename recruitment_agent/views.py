@@ -1258,11 +1258,12 @@ def list_interviews(request):
 def get_available_slots_for_interview(request, token):
     """
     API endpoint to get available slots for an interview based on interview settings.
-    Returns constraints and available slots dynamically.
+    Returns time slots from recruiter settings and checks which are already taken.
     """
     from recruitment_agent.models import Interview, RecruiterInterviewSettings
     from django.utils import timezone
     from datetime import date, time, datetime, timedelta
+    import json
     
     try:
         interview = Interview.objects.get(confirmation_token=token, status='PENDING')
@@ -1271,11 +1272,11 @@ def get_available_slots_for_interview(request, token):
     
     # Get recruiter interview settings
     recruiter = interview.recruiter
+    time_slots = []
     schedule_from_date = None
     schedule_to_date = None
     start_time = time(9, 0)  # Default
     end_time = time(17, 0)  # Default
-    interviews_per_day = 3  # Default
     
     if recruiter:
         try:
@@ -1284,7 +1285,12 @@ def get_available_slots_for_interview(request, token):
             schedule_to_date = settings.schedule_to_date
             start_time = settings.start_time
             end_time = settings.end_time
-            interviews_per_day = settings.interviews_per_day
+            
+            # Get time slots from settings (only available ones)
+            if settings.time_slots_json:
+                all_slots = settings.time_slots_json
+                # Filter only available slots (where available=true)
+                time_slots = [slot for slot in all_slots if slot.get('available', True)]
         except RecruiterInterviewSettings.DoesNotExist:
             pass
     
@@ -1292,20 +1298,53 @@ def get_available_slots_for_interview(request, token):
     now = timezone.now()
     scheduled_interviews = Interview.objects.filter(
         recruiter=recruiter,
-        status='SCHEDULED',
+        status__in=['SCHEDULED', 'CONFIRMED'],
         scheduled_datetime__isnull=False
     ).exclude(id=interview.id)
     
-    # Get scheduled dates and times
-    scheduled_datetimes = set()
-    scheduled_dates_count = {}  # Count interviews per date
+    # Get scheduled datetime strings (ISO format) for comparison
+    taken_slot_datetimes = set()
     
     for scheduled_interview in scheduled_interviews:
         if scheduled_interview.scheduled_datetime:
-            scheduled_datetime = scheduled_interview.scheduled_datetime
-            scheduled_datetimes.add(scheduled_datetime)
-            scheduled_date = scheduled_datetime.date()
-            scheduled_dates_count[scheduled_date] = scheduled_dates_count.get(scheduled_date, 0) + 1
+            # Normalize datetime to YYYY-MM-DDTHH:MM format for comparison
+            scheduled_datetime_normalized = scheduled_interview.scheduled_datetime.strftime('%Y-%m-%dT%H:%M')
+            taken_slot_datetimes.add(scheduled_datetime_normalized)
+            # Also add with seconds for different formats
+            scheduled_datetime_with_seconds = scheduled_interview.scheduled_datetime.strftime('%Y-%m-%dT%H:%M:%S')
+            taken_slot_datetimes.add(scheduled_datetime_with_seconds)
+            # Add ISO format
+            taken_slot_datetimes.add(scheduled_interview.scheduled_datetime.isoformat())
+    
+    # Mark which slots are taken
+    available_slots = []
+    for slot in time_slots:
+        slot_datetime = slot.get('datetime', '')
+        # Normalize slot datetime for comparison (remove seconds if present)
+        slot_datetime_normalized = slot_datetime
+        if 'T' in slot_datetime:
+            # Extract date and time parts
+            date_part, time_part = slot_datetime.split('T')
+            if ':' in time_part:
+                time_hour_min = ':'.join(time_part.split(':')[:2])  # Get only HH:MM
+                slot_datetime_normalized = f"{date_part}T{time_hour_min}"
+        
+        # Check if slot is taken - check both database and scheduled flag in time_slots_json
+        is_scheduled_in_json = slot.get('scheduled', False)  # Check scheduled flag in JSON
+        is_taken_in_db = (slot_datetime in taken_slot_datetimes or 
+                         slot_datetime_normalized in taken_slot_datetimes)
+        
+        # Slot is taken if either scheduled in JSON or found in database
+        is_taken = is_scheduled_in_json or is_taken_in_db
+        
+        available_slots.append({
+            'date': slot.get('date'),
+            'time': slot.get('time'),
+            'datetime': slot_datetime,
+            'available': not is_taken,  # Available if not taken
+            'taken': is_taken,
+            'scheduled': is_scheduled_in_json  # Include scheduled flag for frontend
+        })
     
     # Determine min and max dates
     min_date = schedule_from_date if schedule_from_date else now.date()
@@ -1316,15 +1355,14 @@ def get_available_slots_for_interview(request, token):
     
     return JsonResponse({
         "success": True,
+        "time_slots": available_slots,
         "constraints": {
             "min_date": min_date.isoformat(),
             "max_date": max_date.isoformat(),
             "start_time": start_time.strftime('%H:%M'),
             "end_time": end_time.strftime('%H:%M'),
-            "interviews_per_day": interviews_per_day,
         },
-        "scheduled_slots": [dt.isoformat() for dt in scheduled_datetimes],
-        "scheduled_dates_count": {str(k): v for k, v in scheduled_dates_count.items()},
+        "taken_slots": list(taken_slot_datetimes),
     })
 
 

@@ -224,7 +224,7 @@ class InterviewSchedulingAgent:
                     schedule_to_date = interview_settings.schedule_to_date
                     start_time_obj = interview_settings.start_time
                     end_time_obj = interview_settings.end_time
-                    slots_per_day = interview_settings.interviews_per_day
+                    interview_time_gap = interview_settings.interview_time_gap
                     
                     # Convert time objects to hours for compatibility
                     if start_time_obj:
@@ -236,7 +236,7 @@ class InterviewSchedulingAgent:
                     print(f"   • Schedule from: {schedule_from_date or 'Today'}")
                     print(f"   • Schedule to: {schedule_to_date or 'No limit'}")
                     print(f"   • Time range: {start_time_obj} - {end_time_obj}")
-                    print(f"   • Interviews per day: {slots_per_day}")
+                    print(f"   • Interview time gap: {interview_time_gap} minutes")
                 except RecruiterInterviewSettings.DoesNotExist:
                     print(f"   ⚠️  No interview settings found for recruiter, using defaults")
             except User.DoesNotExist:
@@ -493,7 +493,6 @@ class InterviewSchedulingAgent:
             schedule_to_date = None
             start_time = None
             end_time = None
-            interviews_per_day = 3  # Default
             
             if recruiter:
                 try:
@@ -502,7 +501,6 @@ class InterviewSchedulingAgent:
                     schedule_to_date = settings.schedule_to_date
                     start_time = settings.start_time
                     end_time = settings.end_time
-                    interviews_per_day = settings.interviews_per_day
                 except RecruiterInterviewSettings.DoesNotExist:
                     # Use defaults
                     from datetime import time as dt_time
@@ -547,10 +545,60 @@ class InterviewSchedulingAgent:
                     "error": f"Selected time is after the allowed end time ({end_time.strftime('%H:%M')})",
                 }
             
-            # Check for double-booking (same datetime already scheduled)
+            # Check if the selected slot is available in recruiter settings and mark as scheduled atomically
+            from django.db import transaction
+            
+            selected_datetime_str = selected_datetime.strftime('%Y-%m-%dT%H:%M')
+            slot_found = False
+            slot_available = False
+            slot_scheduled = False
+            settings = None
+            
+            if recruiter:
+                try:
+                    settings = recruiter.recruiter_interview_settings
+                    if settings.time_slots_json:
+                        # Check if the selected datetime matches an available slot
+                        for slot in settings.time_slots_json:
+                            slot_datetime = slot.get('datetime', '')
+                            # Normalize for comparison
+                            slot_datetime_normalized = slot_datetime
+                            if 'T' in slot_datetime:
+                                date_part, time_part = slot_datetime.split('T')
+                                if ':' in time_part:
+                                    time_hour_min = ':'.join(time_part.split(':')[:2])
+                                    slot_datetime_normalized = f"{date_part}T{time_hour_min}"
+                            
+                            if slot_datetime_normalized == selected_datetime_str or slot_datetime == selected_datetime_str:
+                                slot_found = True
+                                slot_available = slot.get('available', True)
+                                slot_scheduled = slot.get('scheduled', False)
+                                break
+                        
+                        if not slot_found:
+                            return {
+                                "success": False,
+                                "error": "Selected time slot not found in available slots. Please select a valid time slot.",
+                            }
+                        
+                        if not slot_available:
+                            return {
+                                "success": False,
+                                "error": "This time slot is not available. Please select another time slot.",
+                            }
+                        
+                        if slot_scheduled:
+                            return {
+                                "success": False,
+                                "error": "This time slot is already selected by another candidate. Please select a different time slot.",
+                            }
+                except RecruiterInterviewSettings.DoesNotExist:
+                    pass
+            
+            # Check for double-booking (same datetime already scheduled) - additional check
             existing_interview = Interview.objects.filter(
                 recruiter=recruiter,
-                status='SCHEDULED',
+                status__in=['SCHEDULED', 'CONFIRMED'],
                 scheduled_datetime=selected_datetime
             ).exclude(id=interview_id).first()
             
@@ -560,27 +608,46 @@ class InterviewSchedulingAgent:
                     "error": "This time slot is already taken by another candidate. Please select a different time.",
                 }
             
-            # Check interviews per day limit
-            interviews_on_date = Interview.objects.filter(
-                recruiter=recruiter,
-                status='SCHEDULED',
-                scheduled_datetime__date=selected_date
-            ).exclude(id=interview_id).count()
-            
-            if interviews_on_date >= interviews_per_day:
-                return {
-                    "success": False,
-                    "error": f"Maximum interviews per day ({interviews_per_day}) has been reached for this date. Please select another date.",
-                }
-            
-            # Format display string
-            selected_slot_display = selected_datetime.strftime('%A, %B %d, %Y at %I:%M %p')
-            
-            # Update interview
-            interview.status = 'SCHEDULED'
-            interview.scheduled_datetime = selected_datetime
-            interview.selected_slot = selected_slot_display
-            interview.save()
+            # Use transaction to atomically mark slot as scheduled and save interview
+            with transaction.atomic():
+                # Reload settings to get latest data (prevent race condition)
+                if recruiter and settings:
+                    settings.refresh_from_db()
+                    if settings.time_slots_json:
+                        # Mark slot as scheduled in time_slots_json
+                        slot_marked = False
+                        for slot in settings.time_slots_json:
+                            slot_datetime = slot.get('datetime', '')
+                            slot_datetime_normalized = slot_datetime
+                            if 'T' in slot_datetime:
+                                date_part, time_part = slot_datetime.split('T')
+                                if ':' in time_part:
+                                    time_hour_min = ':'.join(time_part.split(':')[:2])
+                                    slot_datetime_normalized = f"{date_part}T{time_hour_min}"
+                            
+                            if slot_datetime_normalized == selected_datetime_str or slot_datetime == selected_datetime_str:
+                                # Double-check it's not already scheduled (race condition check)
+                                if slot.get('scheduled', False):
+                                    return {
+                                        "success": False,
+                                        "error": "This time slot was just selected by another candidate. Please select a different time slot.",
+                                    }
+                                # Mark as scheduled
+                                slot['scheduled'] = True
+                                slot_marked = True
+                                break
+                        
+                        if slot_marked:
+                            settings.save()  # Save the updated time_slots_json
+                
+                # Format display string
+                selected_slot_display = selected_datetime.strftime('%A, %B %d, %Y at %I:%M %p')
+                
+                # Update interview
+                interview.status = 'SCHEDULED'
+                interview.scheduled_datetime = selected_datetime
+                interview.selected_slot = selected_slot_display
+                interview.save()
             
             # Send confirmation email
             confirmation_sent = self.send_confirmation_email(interview)

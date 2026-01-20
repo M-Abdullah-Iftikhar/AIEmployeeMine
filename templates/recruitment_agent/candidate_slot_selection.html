@@ -5,145 +5,362 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Select Interview Time Slot</title>
     <style>
+        :root {
+            --bg-primary: #0f0f23;
+            --bg-card: #1a1a2e;
+            --bg-panel: #16213e;
+            --bg-card-hover: #1e1e3f;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --text-muted: #707070;
+            --purple-primary: #6366f1;
+            --purple-light: #818cf8;
+            --purple-dark: #4f46e5;
+            --border-color: #2d2d44;
+            --border-light: #3a3a55;
+            --accent-success: #10b981;
+            --accent-danger: #ef4444;
+            --accent-warning: #f59e0b;
+            --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+            --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.4);
+            --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.5);
+            --shadow-xl: 0 12px 24px rgba(0, 0, 0, 0.6);
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--bg-primary);
+            color: var(--text-primary);
             min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 32px;
+            margin-bottom: 12px;
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .header p {
+            color: var(--text-secondary);
+            font-size: 16px;
+        }
+
+        .interview-info {
+            background: var(--bg-card);
+            padding: 24px;
+            border-radius: 12px;
+            margin-bottom: 32px;
+            border: 1px solid var(--border-color);
+        }
+
+        .interview-info h2 {
+            font-size: 20px;
+            margin-bottom: 16px;
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .info-item {
+            margin-bottom: 12px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .info-item strong {
+            color: var(--text-primary);
+            display: inline-block;
+            width: 140px;
+            font-weight: 600;
+        }
+
+        .error-message, .success-message {
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+            border-left: 4px solid;
+        }
+
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--accent-danger);
+            border-color: var(--accent-danger);
+        }
+
+        .success-message {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--accent-success);
+            border-color: var(--accent-success);
+        }
+
+        .invalid-token {
+            text-align: center;
+            padding: 60px 20px;
+            background: var(--bg-card);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+        }
+
+        .invalid-token h2 {
+            color: var(--accent-danger);
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+
+        /* Time Slots Grid Styles */
+        .time-slots-grid-wrapper {
+            display: flex;
+            gap: 24px;
+            background: var(--bg-panel);
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid var(--border-color);
+        }
+
+        .time-slots-calendar {
+            min-width: 280px;
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 16px;
+            border: 1px solid var(--border-color);
+        }
+
+        .calendar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .calendar-month-year {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .calendar-nav-btn {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 20px;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 20px;
+            transition: all 0.2s;
         }
-        .container {
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-            max-width: 600px;
-            width: 100%;
-            padding: 40px;
+
+        .calendar-nav-btn:hover {
+            background: var(--purple-primary);
+            border-color: var(--purple-primary);
+            color: white;
         }
-        .header {
+
+        .calendar-days-header {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 4px;
+            margin-bottom: 8px;
             text-align: center;
-            margin-bottom: 30px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
         }
-        .header h1 {
-            color: #333;
-            margin-bottom: 10px;
-            font-size: 28px;
+
+        .calendar-dates {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 4px;
         }
-        .header p {
-            color: #666;
-            font-size: 16px;
-        }
-        .interview-info {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 30px;
-        }
-        .interview-info h2 {
-            color: #333;
-            font-size: 20px;
-            margin-bottom: 15px;
-        }
-        .info-item {
-            margin-bottom: 10px;
-            color: #555;
-        }
-        .info-item strong {
-            color: #333;
-            display: inline-block;
-            width: 140px;
-        }
-        .slots-container {
-            margin-bottom: 30px;
-        }
-        .slots-container h3 {
-            color: #333;
-            margin-bottom: 20px;
-            font-size: 18px;
-        }
-        .slot-option {
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 15px;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        .slot-option:hover {
-            border-color: #667eea;
-            background: #f0f4ff;
-        }
-        .slot-option input[type="radio"] {
-            margin-right: 15px;
-            transform: scale(1.2);
-            cursor: pointer;
-        }
-        .slot-option label {
-            cursor: pointer;
-            font-size: 16px;
-            color: #333;
-            font-weight: 500;
+
+        .calendar-date {
+            aspect-ratio: 1;
             display: flex;
             align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: var(--text-muted);
         }
-        .slot-option input[type="radio"]:checked + label {
-            color: #667eea;
+
+        .calendar-date.available {
+            color: var(--text-primary);
+            font-weight: 600;
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+        }
+
+        .calendar-date.available:hover {
+            background: var(--purple-primary);
+            border-color: var(--purple-primary);
+            color: white;
+        }
+
+        .calendar-date.selected {
+            background: var(--purple-primary);
+            border-color: var(--purple-primary);
+            color: white;
+            font-weight: 700;
+        }
+
+        .calendar-date.empty {
+            visibility: hidden;
+        }
+
+        .time-slots-columns {
+            flex: 1;
+            overflow-x: auto;
+        }
+
+        .time-slots-header-row {
+            display: grid;
+            grid-template-columns: 100px repeat(var(--num-dates, 1), 1fr);
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .time-slot-row-header {
+            font-weight: 600;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .time-slot-column-header {
+            padding: 12px;
+            text-align: center;
+            background: var(--bg-card);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            font-weight: 600;
+            font-size: 13px;
+            color: var(--text-primary);
+        }
+
+        .time-slot-column-header.selected {
+            background: var(--purple-primary);
+            border-color: var(--purple-primary);
+            color: white;
+        }
+
+        .time-slots-row {
+            display: grid;
+            grid-template-columns: 100px repeat(var(--num-dates, 1), 1fr);
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .time-slot-row-label {
+            display: flex;
+            align-items: center;
+            font-size: 13px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .time-slot-cell-wrapper {
+            min-height: 50px;
+        }
+
+        .time-slot-cell {
+            height: 100%;
+            min-height: 50px;
+            background: var(--bg-card);
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            padding: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+            color: var(--text-primary);
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .time-slot-cell:hover:not(.taken):not(.empty-slot):not(.selected) {
+            border-color: var(--purple-primary);
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        .time-slot-cell.taken {
+            background: var(--bg-panel);
+            border-color: var(--border-color);
+            color: var(--text-muted);
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        .time-slot-cell.empty-slot {
+            background: transparent;
+            border: none;
+            cursor: default;
+        }
+
+        .time-slot-cell.selected {
+            background: #ef4444;
+            border-color: #ef4444;
+            color: white;
             font-weight: 600;
         }
-        .slot-option input[type="radio"]:checked {
-            accent-color: #667eea;
-        }
+
         .submit-btn {
             width: 100%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--purple-primary) 0%, var(--purple-dark) 100%);
             color: white;
             border: none;
-            padding: 15px;
+            padding: 16px;
             border-radius: 8px;
             font-size: 18px;
             font-weight: 600;
             cursor: pointer;
             transition: transform 0.2s;
+            margin-top: 32px;
         }
-        .submit-btn:hover {
+
+        .submit-btn:hover:not(:disabled) {
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            box-shadow: var(--shadow-lg);
         }
+
         .submit-btn:disabled {
-            background: #ccc;
+            background: var(--bg-panel);
+            color: var(--text-muted);
             cursor: not-allowed;
             transform: none;
         }
-        .error-message {
-            background: #fee;
-            color: #c33;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            border-left: 4px solid #c33;
-        }
-        .success-message {
-            background: #efe;
-            color: #3c3;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            border-left: 4px solid #3c3;
-        }
-        .invalid-token {
-            text-align: center;
-            padding: 40px;
-        }
-        .invalid-token h2 {
-            color: #c33;
-            margin-bottom: 20px;
+
+        @media (max-width: 1024px) {
+            .time-slots-grid-wrapper {
+                flex-direction: column;
+            }
+
+            .time-slots-calendar {
+                min-width: 100%;
+            }
         }
     </style>
 </head>
@@ -156,8 +373,8 @@
         </div>
         {% else %}
         <div class="header">
-            <h1>📅 Select Your Interview Time</h1>
-            <p>Please choose the time slot that works best for you</p>
+            <h1>📅 Available Interview Time Slots</h1>
+            <p>Please select a time slot that works best for you</p>
         </div>
 
         {% if messages %}
@@ -177,157 +394,286 @@
 
         <form method="post" id="slotSelectionForm">
             {% csrf_token %}
-            <div class="slots-container">
-                <h3>Select Your Preferred Date & Time:</h3>
-                <div style="margin-bottom: 20px;">
-                    <label for="selected_slot_datetime" style="display: block; margin-bottom: 10px; font-weight: 600; color: #333;">
-                        Date & Time:
-                    </label>
-                    <input 
-                        type="datetime-local" 
-                        id="selected_slot_datetime" 
-                        name="selected_slot_datetime" 
-                        required
-                        style="width: 100%; padding: 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 16px; background: #f8f9fa;"
-                    />
-                    <div id="datetimeHint" style="margin-top: 8px; font-size: 14px; color: #666;">
-                        Please select a date and time within the available range
-                    </div>
-                    <div id="datetimeError" style="margin-top: 8px; color: #c33; font-size: 14px; display: none;"></div>
-                </div>
-                
-                <div style="background: #f0f4ff; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; color: #555;">
-                    <strong>📋 Available Range:</strong>
-                    <div id="availableRange" style="margin-top: 8px;">
-                        Loading...
+            <input type="hidden" id="selected_slot_datetime" name="selected_slot_datetime" />
+            
+            <div id="timeSlotsGridContainer">
+                <div id="timeSlotsGrid">
+                    <div style="text-align: center; padding: 40px; color: var(--text-secondary);">
+                        Loading available time slots...
                     </div>
                 </div>
             </div>
 
-            <button type="submit" class="submit-btn" id="confirmBtn">✅ Confirm This Time Slot</button>
+            <button type="submit" class="submit-btn" id="confirmBtn" disabled>✅ Confirm This Time Slot</button>
         </form>
         
         <script>
-            // Load available slots and constraints
+            let selectedSlot = null;
+            let timeSlotsData = [];
+            let takenSlots = [];
+
+            // Load available slots
             async function loadAvailableSlots() {
                 try {
                     const response = await fetch('{% url "get_available_slots_for_interview" token %}');
                     const data = await response.json();
                     
                     if (data.success) {
-                        const constraints = data.constraints;
-                        const scheduledSlots = data.scheduled_slots || [];
-                        const scheduledDatesCount = data.scheduled_dates_count || {};
-                        
-                        // Set min and max for datetime input
-                        const datetimeInput = document.getElementById('selected_slot_datetime');
-                        const minDate = constraints.min_date;
-                        const maxDate = constraints.max_date;
-                        const startTime = constraints.start_time;
-                        const endTime = constraints.end_time;
-                        
-                        // Set min datetime (date + start time)
-                        datetimeInput.min = `${minDate}T${startTime}`;
-                        // Set max datetime (date + end time)
-                        datetimeInput.max = `${maxDate}T${endTime}`;
-                        
-                        // Update hint
-                        document.getElementById('availableRange').innerHTML = `
-                            <strong>Date Range:</strong> ${new Date(minDate).toLocaleDateString()} to ${new Date(maxDate).toLocaleDateString()}<br>
-                            <strong>Time Range:</strong> ${startTime} to ${endTime}<br>
-                            <strong>Interviews Per Day:</strong> ${constraints.interviews_per_day}
-                        `;
-                        
-                        // Store constraints for validation
-                        window.interviewConstraints = constraints;
-                        window.scheduledSlots = scheduledSlots;
-                        window.scheduledDatesCount = scheduledDatesCount;
-                        
-                        // Add validation on change
-                        datetimeInput.addEventListener('change', validateSelectedSlot);
+                        timeSlotsData = data.time_slots || [];
+                        takenSlots = data.taken_slots || [];
+                        displayTimeSlotsGrid();
                     } else {
-                        document.getElementById('datetimeError').textContent = 'Error loading available slots. Please refresh the page.';
-                        document.getElementById('datetimeError').style.display = 'block';
+                        document.getElementById('timeSlotsGrid').innerHTML = 
+                            '<div style="text-align: center; padding: 40px; color: var(--accent-danger);">Error loading available slots. Please refresh the page.</div>';
                     }
                 } catch (error) {
                     console.error('Error loading slots:', error);
-                    document.getElementById('datetimeError').textContent = 'Error loading available slots. Please refresh the page.';
-                    document.getElementById('datetimeError').style.display = 'block';
+                    document.getElementById('timeSlotsGrid').innerHTML = 
+                        '<div style="text-align: center; padding: 40px; color: var(--accent-danger);">Error loading available slots. Please refresh the page.</div>';
                 }
             }
-            
-            // Validate selected slot
-            function validateSelectedSlot() {
-                const datetimeInput = document.getElementById('selected_slot_datetime');
-                const errorDiv = document.getElementById('datetimeError');
-                const confirmBtn = document.getElementById('confirmBtn');
-                
-                if (!datetimeInput.value) {
-                    errorDiv.style.display = 'none';
-                    return;
-                }
-                
-                if (!window.interviewConstraints) {
-                    return;
-                }
-                
-                const selectedDatetime = new Date(datetimeInput.value);
-                const selectedDate = selectedDatetime.toISOString().split('T')[0];
-                const selectedTime = selectedDatetime.toTimeString().split(' ')[0].substring(0, 5);
-                const selectedISO = selectedDatetime.toISOString();
-                
-                // Check if slot is already taken
-                if (window.scheduledSlots && window.scheduledSlots.includes(selectedISO)) {
-                    errorDiv.textContent = '❌ This time slot is already taken. Please select another time.';
-                    errorDiv.style.display = 'block';
-                    confirmBtn.disabled = true;
-                    return;
-                }
-                
-                // Check interviews per day limit
-                const dateCount = window.scheduledDatesCount[selectedDate] || 0;
-                if (dateCount >= window.interviewConstraints.interviews_per_day) {
-                    errorDiv.textContent = `❌ Maximum interviews per day (${window.interviewConstraints.interviews_per_day}) reached for this date. Please select another date.`;
-                    errorDiv.style.display = 'block';
-                    confirmBtn.disabled = true;
-                    return;
-                }
-                
-                // Check time range
-                const startTime = window.interviewConstraints.start_time;
-                const endTime = window.interviewConstraints.end_time;
-                if (selectedTime < startTime || selectedTime > endTime) {
-                    errorDiv.textContent = `❌ Selected time must be between ${startTime} and ${endTime}.`;
-                    errorDiv.style.display = 'block';
-                    confirmBtn.disabled = true;
-                    return;
-                }
-                
-                // All validations passed
-                errorDiv.style.display = 'none';
-                confirmBtn.disabled = false;
+
+            function formatTime(hours, mins) {
+                const period = hours >= 12 ? 'pm' : 'am';
+                const displayHour = hours > 12 ? hours - 12 : (hours === 0 ? 12 : hours);
+                return `${displayHour}:${mins.toString().padStart(2, '0')}${period}`;
             }
-            
-            // Load slots when page loads
-            loadAvailableSlots();
-            
-            // Validate on form submit
+
+            function formatMonthYear(date) {
+                return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            }
+
+            function displayTimeSlotsGrid() {
+                if (!timeSlotsData || timeSlotsData.length === 0) {
+                    document.getElementById('timeSlotsGrid').innerHTML = 
+                        '<div style="text-align: center; padding: 40px; color: var(--text-secondary);">No available time slots found. Please contact the recruiter.</div>';
+                    return;
+                }
+
+                // Group slots by date
+                const slotsByDate = {};
+                timeSlotsData.forEach(slot => {
+                    const date = slot.date.split('T')[0];
+                    if (!slotsByDate[date]) {
+                        slotsByDate[date] = [];
+                    }
+                    slotsByDate[date].push(slot);
+                });
+
+                // Get all dates
+                const dates = Object.keys(slotsByDate).sort();
+                if (dates.length === 0) {
+                    document.getElementById('timeSlotsGrid').innerHTML = 
+                        '<div style="text-align: center; padding: 40px; color: var(--text-secondary);">No available time slots found.</div>';
+                    return;
+                }
+
+                // Get all unique times
+                const allTimes = new Set();
+                timeSlotsData.forEach(slot => {
+                    allTimes.add(slot.time);
+                });
+                const sortedTimes = Array.from(allTimes).sort();
+
+                // Set CSS variable for number of dates
+                document.documentElement.style.setProperty('--num-dates', dates.length);
+
+                // Get first date for calendar
+                const firstDate = new Date(dates[0] + 'T00:00:00');
+
+                // Create grid HTML
+                let gridHTML = '<div class="time-slots-grid-wrapper">';
+                
+                // Calendar
+                gridHTML += '<div class="time-slots-calendar">';
+                gridHTML += '<div class="calendar-header">';
+                gridHTML += '<button type="button" class="calendar-nav-btn" onclick="changeCalendarMonth(-1)">‹</button>';
+                gridHTML += `<div class="calendar-month-year">${formatMonthYear(firstDate)}</div>`;
+                gridHTML += '<button type="button" class="calendar-nav-btn" onclick="changeCalendarMonth(1)">›</button>';
+                gridHTML += '</div>';
+                gridHTML += '<div class="calendar-days-header">S M T W T F S</div>';
+                gridHTML += '<div class="calendar-dates" id="calendarDates"></div>';
+                gridHTML += '</div>';
+
+                // Time slots grid
+                gridHTML += '<div class="time-slots-columns">';
+                gridHTML += '<div class="time-slots-header-row">';
+                gridHTML += '<div class="time-slot-row-header"></div>';
+                dates.forEach((dateStr, index) => {
+                    const date = new Date(dateStr + 'T00:00:00');
+                    const dayName = date.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+                    const dayNum = date.getDate();
+                    const isSelected = index === 0;
+                    gridHTML += `<div class="time-slot-column-header ${isSelected ? 'selected' : ''}" data-date="${dateStr}">${dayName} ${dayNum}</div>`;
+                });
+                gridHTML += '</div>';
+
+                // Time rows
+                sortedTimes.forEach(timeStr => {
+                    const [hours, mins] = timeStr.split(':').map(Number);
+                    const displayTime = formatTime(hours, mins);
+                    gridHTML += '<div class="time-slots-row">';
+                    gridHTML += `<div class="time-slot-row-label">${displayTime}</div>`;
+                    
+                    dates.forEach(dateStr => {
+                        const slot = slotsByDate[dateStr]?.find(s => s.time === timeStr);
+                        // Check if slot is taken: either scheduled flag is true OR taken flag is true OR in takenSlots array
+                        const isSlotTakenCheck = slot && (slot.scheduled === true || slot.taken === true || isSlotTaken(slot.datetime));
+                        
+                        if (slot && slot.available && !isSlotTakenCheck) {
+                            // Available slot - clickable
+                            gridHTML += `<div class="time-slot-cell-wrapper">
+                                <div class="time-slot-cell" data-datetime="${slot.datetime}" onclick="selectSlot(this, '${slot.datetime}')">
+                                    ${displayTime}
+                                </div>
+                            </div>`;
+                        } else if (slot && (isSlotTakenCheck || !slot.available)) {
+                            // Taken or unavailable slot - disabled, show in red
+                            gridHTML += `<div class="time-slot-cell-wrapper">
+                                <div class="time-slot-cell taken" title="This slot is already selected by another candidate">
+                                    ${displayTime}
+                                </div>
+                            </div>`;
+                        } else {
+                            // Empty slot (not in available slots)
+                            gridHTML += '<div class="time-slot-cell-wrapper"><div class="time-slot-cell empty-slot"></div></div>';
+                        }
+                    });
+                    gridHTML += '</div>';
+                });
+                gridHTML += '</div>';
+                gridHTML += '</div>';
+
+                document.getElementById('timeSlotsGrid').innerHTML = gridHTML;
+
+                // Generate calendar dates
+                generateCalendarDates(firstDate, dates);
+            }
+
+            function isSlotTaken(datetime) {
+                // Check if slot is in taken slots list
+                return takenSlots.some(taken => {
+                    // Compare datetime strings (handle different formats)
+                    const normalizedTaken = taken.split('T')[0] + 'T' + taken.split('T')[1]?.substring(0, 5);
+                    const normalizedSlot = datetime.split('T')[0] + 'T' + datetime.split('T')[1]?.substring(0, 5);
+                    return normalizedTaken === normalizedSlot || taken === datetime;
+                });
+            }
+
+            function generateCalendarDates(selectedDate, availableDates) {
+                const container = document.getElementById('calendarDates');
+                if (!container) return;
+
+                const year = selectedDate.getFullYear();
+                const month = selectedDate.getMonth();
+                const firstDay = new Date(year, month, 1);
+                const lastDay = new Date(year, month + 1, 0);
+                const startDay = firstDay.getDay();
+                const daysInMonth = lastDay.getDate();
+
+                let html = '';
+                
+                // Empty cells for days before month starts
+                for (let i = 0; i < startDay; i++) {
+                    html += '<div class="calendar-date empty"></div>';
+                }
+
+                // Days of the month
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const date = new Date(year, month, day);
+                    const dateStr = date.toISOString().split('T')[0];
+                    const isAvailable = availableDates.includes(dateStr);
+                    const isSelected = dateStr === availableDates[0];
+                    
+                    html += `<div class="calendar-date ${isAvailable ? 'available' : ''} ${isSelected ? 'selected' : ''}" data-date="${dateStr}">${day}</div>`;
+                }
+
+                container.innerHTML = html;
+            }
+
+            function selectSlot(element, datetime) {
+                // Remove previous selection
+                document.querySelectorAll('.time-slot-cell.selected').forEach(cell => {
+                    cell.classList.remove('selected');
+                });
+
+                // Add selection to clicked slot
+                element.classList.add('selected');
+                selectedSlot = datetime;
+                document.getElementById('selected_slot_datetime').value = datetime;
+                document.getElementById('confirmBtn').disabled = false;
+            }
+
+            function changeCalendarMonth(direction) {
+                // Calendar navigation (for future enhancement)
+                // Currently just reloads the grid
+                displayTimeSlotsGrid();
+            }
+
+            // Form submission
             document.getElementById('slotSelectionForm').addEventListener('submit', function(e) {
-                const datetimeInput = document.getElementById('selected_slot_datetime');
-                if (!datetimeInput.value) {
+                if (!selectedSlot) {
                     e.preventDefault();
-                    alert('Please select a date and time.');
+                    alert('Please select a time slot.');
                     return;
                 }
-                validateSelectedSlot();
-                if (document.getElementById('confirmBtn').disabled) {
+
+                // Find the selected slot in the data
+                const selectedSlotData = timeSlotsData.find(slot => slot.datetime === selectedSlot);
+                
+                // Real-time check before submission - check scheduled flag and taken status
+                if (selectedSlotData && (selectedSlotData.scheduled === true || selectedSlotData.taken === true || isSlotTaken(selectedSlot))) {
                     e.preventDefault();
+                    alert('⚠️ This time slot is already selected by another candidate. Please select another slot.');
+                    // Clear selection and reload slots
+                    selectedSlot = null;
+                    document.getElementById('selected_slot_datetime').value = '';
+                    document.getElementById('confirmBtn').disabled = true;
+                    document.querySelectorAll('.time-slot-cell.selected').forEach(cell => {
+                        cell.classList.remove('selected');
+                    });
+                    loadAvailableSlots();
                     return;
                 }
             });
+
+            // Load slots on page load
+            loadAvailableSlots();
+
+            // Periodically check for slot availability (every 3 seconds)
+            setInterval(() => {
+                if (!selectedSlot) return;
+                
+                fetch('{% url "get_available_slots_for_interview" token %}')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            takenSlots = data.taken_slots || [];
+                            timeSlotsData = data.time_slots || [];
+                            
+                            // Check if selected slot is now taken or scheduled
+                            const selectedSlotData = timeSlotsData.find(slot => slot.datetime === selectedSlot);
+                            const isNowTaken = selectedSlotData && (selectedSlotData.scheduled === true || selectedSlotData.taken === true || isSlotTaken(selectedSlot));
+                            
+                            if (isNowTaken) {
+                                const selectedElement = document.querySelector(`.time-slot-cell[data-datetime="${selectedSlot}"]`);
+                                if (selectedElement) {
+                                    selectedElement.classList.remove('selected');
+                                    selectedElement.classList.add('taken');
+                                    selectedSlot = null;
+                                    document.getElementById('selected_slot_datetime').value = '';
+                                    document.getElementById('confirmBtn').disabled = true;
+                                    alert('⚠️ The slot you selected has been taken by another candidate. Please select another slot.');
+                                    // Reload grid to reflect changes
+                                    displayTimeSlotsGrid();
+                                }
+                            }
+                        }
+                    })
+                    .catch(error => console.error('Error checking slot availability:', error));
+            }, 3000);
         </script>
         {% endif %}
     </div>
 </body>
 </html>
-
