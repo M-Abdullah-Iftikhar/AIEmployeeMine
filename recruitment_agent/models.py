@@ -8,7 +8,8 @@ class RecruiterEmailSettings(models.Model):
     Recruiter email timing preferences.
     Each recruiter can set their own preferences for follow-up and reminder emails.
     """
-    recruiter = models.OneToOneField(User, on_delete=models.CASCADE, related_name='recruiter_email_settings')
+    recruiter = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True, related_name='recruiter_email_settings')
+    company_user = models.OneToOneField('core.CompanyUser', on_delete=models.CASCADE, null=True, blank=True, related_name='recruiter_email_settings_company')
     
     # Follow-up email settings for PENDING interviews
     followup_delay_hours = models.FloatField(
@@ -55,11 +56,12 @@ class RecruiterInterviewSettings(models.Model):
     """
     Recruiter interview scheduling preferences.
     Each recruiter can set their own preferences for interview scheduling:
-    - Date range for scheduling interviews
-    - Time range for daily interview hours
-    - Number of interviews per day
+    - Date range for scheduling interviews (from date to date)
+    - Time range for daily interview hours (start time to end time)
+    - Interview time gap (minutes between slots)
     """
-    recruiter = models.OneToOneField(User, on_delete=models.CASCADE, related_name='recruiter_interview_settings')
+    recruiter = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True, related_name='recruiter_interview_settings')
+    company_user = models.OneToOneField('core.CompanyUser', on_delete=models.CASCADE, null=True, blank=True, related_name='recruiter_interview_settings_company')
     
     # Date range for scheduling interviews
     schedule_from_date = models.DateField(
@@ -83,10 +85,17 @@ class RecruiterInterviewSettings(models.Model):
         help_text="End time of day for interviews (e.g., 17:00 for 5 PM)"
     )
     
-    # Number of interviews per day
-    interviews_per_day = models.IntegerField(
-        default=3,
-        help_text="Maximum number of interviews that can be scheduled per day"
+    # Interview time gap
+    interview_time_gap = models.IntegerField(
+        default=30,
+        help_text="Time gap between interview slots in minutes (e.g., 30 for 30 minutes)"
+    )
+    
+    # Generated time slots stored as JSON
+    time_slots_json = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Generated time slots stored as JSON array. Format: [{'date': 'YYYY-MM-DD', 'time': 'HH:MM', 'datetime': 'YYYY-MM-DDTHH:MM'}, ...]"
     )
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -125,6 +134,7 @@ class JobDescription(models.Model):
     # Metadata
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_job_descriptions')
     company = models.ForeignKey('core.Company', on_delete=models.SET_NULL, null=True, blank=True, related_name='job_positions')
+    company_user = models.ForeignKey('core.CompanyUser', on_delete=models.SET_NULL, null=True, blank=True, related_name='created_jobs', help_text='Company user who created this job')
     is_active = models.BooleanField(default=True, help_text="Whether this job description is currently active/being used")
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
@@ -215,6 +225,7 @@ class Interview(models.Model):
     
     # Recruiter information
     recruiter = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='scheduled_interviews')
+    company_user = models.ForeignKey('core.CompanyUser', on_delete=models.SET_NULL, null=True, blank=True, related_name='scheduled_interviews_company')
     
     # Recruiter Email Timing Preferences (configurable per interview, defaults from RecruiterEmailSettings)
     followup_delay_hours = models.FloatField(default=48, help_text="Hours to wait before sending first follow-up email (e.g., 0.1 = 6 minutes)")

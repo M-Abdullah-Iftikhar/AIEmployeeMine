@@ -24,6 +24,8 @@ from api.views import chatbot
 from api.views import white_label
 from api.views import company_jobs
 from api.views import pm_agent
+from api.views import company_dashboard
+from api.views import recruitment_agent
 from api.views.health import health_check
 
 app_name = 'api'
@@ -135,6 +137,11 @@ urlpatterns = [
     re_path(r'^ai-predictor/admin/?$', ai_predictor.list_ai_predictions, name='list_ai_predictions'),  # GET (admin)
     re_path(r'^ai-predictor/admin/(?P<id>\d+)/?$', ai_predictor.get_ai_prediction, name='get_ai_prediction'),  # GET (admin)
 
+    # Project Manager Dashboard endpoint
+    re_path(r'^project-manager/dashboard/?$', company_dashboard.project_manager_dashboard, name='pm_dashboard'),
+    # Company User Projects endpoint
+    re_path(r'^company/projects/?$', company_dashboard.get_company_user_projects, name='get_company_user_projects'),
+
     # Project Manager AI Agent endpoints (token-auth friendly)
     re_path(r'^project-manager/ai/project-pilot/?$', pm_agent.project_pilot, name='pm_project_pilot'),
     re_path(r'^project-manager/ai/task-prioritization/?$', pm_agent.task_prioritization, name='pm_task_prioritization'),
@@ -158,4 +165,17 @@ urlpatterns = [
     re_path(r'^company/jobs/(?P<id>\d+)/?$', company_jobs.update_company_job, name='update_company_job'),  # PUT
     re_path(r'^company/jobs/(?P<jobId>\d+)/applications/?$', company_jobs.get_company_job_applications, name='get_company_job_applications'),
     re_path(r'^company/applications/(?P<id>\d+)/status/?$', company_jobs.update_company_application_status, name='update_company_application_status'),
+    
+    # Recruitment Agent endpoints (Company User)
+    re_path(r'^recruitment/process-cvs/?$', recruitment_agent.process_cvs, name='recruitment_process_cvs'),  # POST
+    re_path(r'^recruitment/job-descriptions/?$', recruitment_agent.list_job_descriptions, name='recruitment_list_job_descriptions'),  # GET
+    re_path(r'^recruitment/job-descriptions/create/?$', recruitment_agent.create_job_description, name='recruitment_create_job_description'),  # POST
+    re_path(r'^recruitment/job-descriptions/(?P<job_description_id>\d+)/update/?$', recruitment_agent.update_job_description, name='recruitment_update_job_description'),  # PUT/PATCH
+    re_path(r'^recruitment/job-descriptions/(?P<job_description_id>\d+)/delete/?$', recruitment_agent.delete_job_description, name='recruitment_delete_job_description'),  # DELETE
+    re_path(r'^recruitment/interviews/?$', recruitment_agent.list_interviews, name='recruitment_list_interviews'),  # GET
+    re_path(r'^recruitment/interviews/schedule/?$', recruitment_agent.schedule_interview, name='recruitment_schedule_interview'),  # POST
+    re_path(r'^recruitment/interviews/(?P<interview_id>\d+)/?$', recruitment_agent.get_interview_details, name='recruitment_get_interview_details'),  # GET
+    re_path(r'^recruitment/cv-records/?$', recruitment_agent.list_cv_records, name='recruitment_list_cv_records'),  # GET
+    re_path(r'^recruitment/settings/email/?$', recruitment_agent.email_settings, name='recruitment_email_settings'),  # GET/POST
+    re_path(r'^recruitment/settings/interview/?$', recruitment_agent.interview_settings, name='recruitment_interview_settings'),  # GET/POST
 ]

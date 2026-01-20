@@ -50,6 +50,8 @@ class InterviewSchedulingAgent:
         candidate_phone: Optional[str] = None,
         cv_record_id: Optional[int] = None,
         recruiter_id: Optional[int] = None,
+        company_user_id: Optional[int] = None,
+        email_settings: Optional[Dict[str, Any]] = None,
         custom_slots: Optional[List[Dict[str, str]]] = None,
     ) -> Dict[str, Any]:
         """
@@ -91,8 +93,41 @@ class InterviewSchedulingAgent:
         
         print("\n⚙️  APPLYING RECRUITER EMAIL SETTINGS TO INTERVIEW")
         print(f"   Recruiter ID: {recruiter_id}")
+        print(f"   Company User ID: {company_user_id}")
         
-        if recruiter_id:
+        # Use provided email_settings if available
+        if email_settings:
+            followup_delay = email_settings.get('followup_delay_hours', followup_delay)
+            reminder_hours = email_settings.get('reminder_hours_before', reminder_hours)
+            max_followups = email_settings.get('max_followup_emails', max_followups)
+            min_between = email_settings.get('min_hours_between_followups', min_between)
+            print(f"   ✅ Using provided email settings:")
+            print(f"      • Follow-up delay: {followup_delay} hours ({followup_delay * 60} minutes)")
+            print(f"      • Reminder hours before: {reminder_hours} hours")
+            print(f"      • Max follow-ups: {max_followups}")
+            print(f"      • Min hours between follow-ups: {min_between} hours ({min_between * 60} minutes)")
+        elif company_user_id:
+            # Try to get company user email settings
+            try:
+                from core.models import CompanyUser
+                company_user = CompanyUser.objects.get(id=company_user_id)
+                settings = company_user.recruiter_email_settings
+                followup_delay = settings.followup_delay_hours
+                reminder_hours = settings.reminder_hours_before
+                max_followups = settings.max_followup_emails
+                min_between = settings.min_hours_between_followups
+                print(f"   ✅ Using company user custom settings:")
+                print(f"      • Follow-up delay: {followup_delay} hours ({followup_delay * 60} minutes)")
+                print(f"      • Reminder hours before: {reminder_hours} hours")
+                print(f"      • Max follow-ups: {max_followups}")
+                print(f"      • Min hours between follow-ups: {min_between} hours ({min_between * 60} minutes)")
+            except CompanyUser.DoesNotExist:
+                print(f"   ⚠️  Company user not found (ID: {company_user_id}), using defaults")
+            except RecruiterEmailSettings.DoesNotExist:
+                print(f"   ⚠️  No email settings found for company user, using defaults")
+            except Exception as e:
+                print(f"   ⚠️  Error getting company user settings: {str(e)}, using defaults")
+        elif recruiter_id:
             try:
                 from django.contrib.auth.models import User
                 recruiter = User.objects.get(id=recruiter_id)
@@ -114,7 +149,7 @@ class InterviewSchedulingAgent:
             except Exception as e:
                 print(f"   ⚠️  Error getting recruiter settings: {str(e)}, using defaults")
         else:
-            print(f"   ⚠️  No recruiter ID provided, using defaults")
+            print(f"   ⚠️  No recruiter ID or company user ID provided, using defaults")
         
         print(f"   📝 Final settings to apply:")
         print(f"      • Follow-up delay: {followup_delay} hours ({followup_delay * 60} minutes)")
@@ -122,25 +157,36 @@ class InterviewSchedulingAgent:
         print(f"      • Max follow-ups: {max_followups}")
         print(f"      • Min hours between follow-ups: {min_between} hours ({min_between * 60} minutes)")
         
-        # Create interview record with recruiter preferences
-        interview = Interview.objects.create(
-            candidate_name=candidate_name,
-            candidate_email=candidate_email,
-            candidate_phone=candidate_phone,
-            job_role=job_role,
-            interview_type=interview_type,
-            status='PENDING',
-            available_slots_json=json.dumps(available_slots, default=str),
-            cv_record_id=cv_record_id,
-            recruiter_id=recruiter_id,
-            confirmation_token=confirmation_token,
-            invitation_sent_at=timezone.now(),
-            # Apply recruiter email timing preferences
-            followup_delay_hours=followup_delay,
-            reminder_hours_before=reminder_hours,
-            max_followup_emails=max_followups,
-            min_hours_between_followups=min_between,
-        )
+        # Create interview record with recruiter/company_user preferences
+        interview_data = {
+            'candidate_name': candidate_name,
+            'candidate_email': candidate_email,
+            'candidate_phone': candidate_phone,
+            'job_role': job_role,
+            'interview_type': interview_type,
+            'status': 'PENDING',
+            'available_slots_json': json.dumps(available_slots, default=str),
+            'cv_record_id': cv_record_id,
+            'recruiter_id': recruiter_id,
+            'confirmation_token': confirmation_token,
+            'invitation_sent_at': timezone.now(),
+            # Apply email timing preferences
+            'followup_delay_hours': followup_delay,
+            'reminder_hours_before': reminder_hours,
+            'max_followup_emails': max_followups,
+            'min_hours_between_followups': min_between,
+        }
+        
+        # Add company_user if provided
+        if company_user_id:
+            from core.models import CompanyUser
+            try:
+                company_user = CompanyUser.objects.get(id=company_user_id)
+                interview_data['company_user'] = company_user
+            except CompanyUser.DoesNotExist:
+                pass
+        
+        interview = Interview.objects.create(**interview_data)
         
         print(f"   ✅ Interview created with ID: {interview.id}")
         print(f"   ✅ Email settings saved to interview record")
@@ -224,7 +270,7 @@ class InterviewSchedulingAgent:
                     schedule_to_date = interview_settings.schedule_to_date
                     start_time_obj = interview_settings.start_time
                     end_time_obj = interview_settings.end_time
-                    slots_per_day = interview_settings.interviews_per_day
+                    interview_time_gap = interview_settings.interview_time_gap
                     
                     # Convert time objects to hours for compatibility
                     if start_time_obj:
@@ -236,7 +282,7 @@ class InterviewSchedulingAgent:
                     print(f"   • Schedule from: {schedule_from_date or 'Today'}")
                     print(f"   • Schedule to: {schedule_to_date or 'No limit'}")
                     print(f"   • Time range: {start_time_obj} - {end_time_obj}")
-                    print(f"   • Interviews per day: {slots_per_day}")
+                    print(f"   • Interview time gap: {interview_time_gap} minutes")
                 except RecruiterInterviewSettings.DoesNotExist:
                     print(f"   ⚠️  No interview settings found for recruiter, using defaults")
             except User.DoesNotExist:
@@ -493,7 +539,6 @@ class InterviewSchedulingAgent:
             schedule_to_date = None
             start_time = None
             end_time = None
-            interviews_per_day = 3  # Default
             
             if recruiter:
                 try:
@@ -502,7 +547,6 @@ class InterviewSchedulingAgent:
                     schedule_to_date = settings.schedule_to_date
                     start_time = settings.start_time
                     end_time = settings.end_time
-                    interviews_per_day = settings.interviews_per_day
                 except RecruiterInterviewSettings.DoesNotExist:
                     # Use defaults
                     from datetime import time as dt_time
@@ -547,10 +591,60 @@ class InterviewSchedulingAgent:
                     "error": f"Selected time is after the allowed end time ({end_time.strftime('%H:%M')})",
                 }
             
-            # Check for double-booking (same datetime already scheduled)
+            # Check if the selected slot is available in recruiter settings and mark as scheduled atomically
+            from django.db import transaction
+            
+            selected_datetime_str = selected_datetime.strftime('%Y-%m-%dT%H:%M')
+            slot_found = False
+            slot_available = False
+            slot_scheduled = False
+            settings = None
+            
+            if recruiter:
+                try:
+                    settings = recruiter.recruiter_interview_settings
+                    if settings.time_slots_json:
+                        # Check if the selected datetime matches an available slot
+                        for slot in settings.time_slots_json:
+                            slot_datetime = slot.get('datetime', '')
+                            # Normalize for comparison
+                            slot_datetime_normalized = slot_datetime
+                            if 'T' in slot_datetime:
+                                date_part, time_part = slot_datetime.split('T')
+                                if ':' in time_part:
+                                    time_hour_min = ':'.join(time_part.split(':')[:2])
+                                    slot_datetime_normalized = f"{date_part}T{time_hour_min}"
+                            
+                            if slot_datetime_normalized == selected_datetime_str or slot_datetime == selected_datetime_str:
+                                slot_found = True
+                                slot_available = slot.get('available', True)
+                                slot_scheduled = slot.get('scheduled', False)
+                                break
+                        
+                        if not slot_found:
+                            return {
+                                "success": False,
+                                "error": "Selected time slot not found in available slots. Please select a valid time slot.",
+                            }
+                        
+                        if not slot_available:
+                            return {
+                                "success": False,
+                                "error": "This time slot is not available. Please select another time slot.",
+                            }
+                        
+                        if slot_scheduled:
+                            return {
+                                "success": False,
+                                "error": "This time slot is already selected by another candidate. Please select a different time slot.",
+                            }
+                except RecruiterInterviewSettings.DoesNotExist:
+                    pass
+            
+            # Check for double-booking (same datetime already scheduled) - additional check
             existing_interview = Interview.objects.filter(
                 recruiter=recruiter,
-                status='SCHEDULED',
+                status__in=['SCHEDULED', 'CONFIRMED'],
                 scheduled_datetime=selected_datetime
             ).exclude(id=interview_id).first()
             
@@ -560,27 +654,46 @@ class InterviewSchedulingAgent:
                     "error": "This time slot is already taken by another candidate. Please select a different time.",
                 }
             
-            # Check interviews per day limit
-            interviews_on_date = Interview.objects.filter(
-                recruiter=recruiter,
-                status='SCHEDULED',
-                scheduled_datetime__date=selected_date
-            ).exclude(id=interview_id).count()
-            
-            if interviews_on_date >= interviews_per_day:
-                return {
-                    "success": False,
-                    "error": f"Maximum interviews per day ({interviews_per_day}) has been reached for this date. Please select another date.",
-                }
-            
-            # Format display string
-            selected_slot_display = selected_datetime.strftime('%A, %B %d, %Y at %I:%M %p')
-            
-            # Update interview
-            interview.status = 'SCHEDULED'
-            interview.scheduled_datetime = selected_datetime
-            interview.selected_slot = selected_slot_display
-            interview.save()
+            # Use transaction to atomically mark slot as scheduled and save interview
+            with transaction.atomic():
+                # Reload settings to get latest data (prevent race condition)
+                if recruiter and settings:
+                    settings.refresh_from_db()
+                    if settings.time_slots_json:
+                        # Mark slot as scheduled in time_slots_json
+                        slot_marked = False
+                        for slot in settings.time_slots_json:
+                            slot_datetime = slot.get('datetime', '')
+                            slot_datetime_normalized = slot_datetime
+                            if 'T' in slot_datetime:
+                                date_part, time_part = slot_datetime.split('T')
+                                if ':' in time_part:
+                                    time_hour_min = ':'.join(time_part.split(':')[:2])
+                                    slot_datetime_normalized = f"{date_part}T{time_hour_min}"
+                            
+                            if slot_datetime_normalized == selected_datetime_str or slot_datetime == selected_datetime_str:
+                                # Double-check it's not already scheduled (race condition check)
+                                if slot.get('scheduled', False):
+                                    return {
+                                        "success": False,
+                                        "error": "This time slot was just selected by another candidate. Please select a different time slot.",
+                                    }
+                                # Mark as scheduled
+                                slot['scheduled'] = True
+                                slot_marked = True
+                                break
+                        
+                        if slot_marked:
+                            settings.save()  # Save the updated time_slots_json
+                
+                # Format display string
+                selected_slot_display = selected_datetime.strftime('%A, %B %d, %Y at %I:%M %p')
+                
+                # Update interview
+                interview.status = 'SCHEDULED'
+                interview.scheduled_datetime = selected_datetime
+                interview.selected_slot = selected_slot_display
+                interview.save()
             
             # Send confirmation email
             confirmation_sent = self.send_confirmation_email(interview)
