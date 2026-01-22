@@ -12,6 +12,7 @@ from api.authentication import CompanyUserTokenAuthentication
 from api.permissions import IsCompanyUserOnly
 
 import logging
+import json
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
@@ -98,7 +99,7 @@ def _build_user_assignments(available_users, *, project_id=None, all_tasks=None,
             else:
                 # It's a list (evaluated QuerySet), filter in Python
                 user_tasks = [t for t in all_tasks if hasattr(t, 'assignee_id') and t.assignee_id == user_id]
-
+        
         user_assignments.append(
             {
                 "user": user_info,
@@ -173,18 +174,18 @@ def project_pilot(request):
                     "description": project.description,
                     "status": project.status,
                     "priority": project.priority,
-                    "tasks": [
-                        {
-                            "id": t.id,
-                            "title": t.title,
-                            "status": t.status,
-                            "priority": t.priority,
-                            "description": t.description,
-                            "assignee_id": t.assignee.id if t.assignee else None,
-                            "assignee_username": t.assignee.username if t.assignee else None,
-                        }
-                        for t in tasks
-                    ],
+                "tasks": [
+                    {
+                        "id": t.id,
+                        "title": t.title,
+                        "status": t.status,
+                        "priority": t.priority,
+                        "description": t.description,
+                        "assignee_id": t.assignee.id if t.assignee else None,
+                        "assignee_username": t.assignee.username if t.assignee else None,
+                    }
+                    for t in tasks
+                ],
                 },
                 "all_projects": [
                     {
@@ -238,9 +239,160 @@ def project_pilot(request):
         if result.get("action"):
             actions = [result["action"]]
         
+        # If no actions found, try parsing from answer field (sometimes agent returns JSON string in answer)
+        if len(actions) == 0 and result.get("answer"):
+            answer_str = result.get("answer", "").strip()
+            if answer_str and "[" in answer_str:
+                try:
+                    # Clean the JSON string by removing control characters (except newlines and tabs)
+                    import re
+                    # Remove control characters except newline (\n), carriage return (\r), and tab (\t)
+                    cleaned_str = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', answer_str)
+                    
+                    # Find the start of the JSON array
+                    first_bracket = cleaned_str.find('[')
+                    if first_bracket < 0:
+                        first_bracket = 0
+                    
+                    # Find all object boundaries by counting braces
+                    brace_count = 0
+                    bracket_count = 0
+                    last_valid_pos = -1
+                    
+                    # Start counting from the first bracket
+                    for i in range(first_bracket, len(cleaned_str)):
+                        char = cleaned_str[i]
+                        if char == '[':
+                            bracket_count += 1
+                        elif char == ']':
+                            bracket_count -= 1
+                        elif char == '{':
+                            brace_count += 1
+                        elif char == '}':
+                            brace_count -= 1
+                        
+                        # Track the last position where we had a complete object
+                        if brace_count == 0 and bracket_count > 0:
+                            last_valid_pos = i
+                    
+                    # Try to find the end by matching brackets
+                    bracket_count = 0
+                    end_pos = -1
+                    for i in range(first_bracket, len(cleaned_str)):
+                        char = cleaned_str[i]
+                        if char == '[':
+                            bracket_count += 1
+                        elif char == ']':
+                            bracket_count -= 1
+                            if bracket_count == 0:
+                                end_pos = i + 1
+                                break
+                    
+                    # If we couldn't find matching bracket, try to fix common issues
+                    if end_pos <= first_bracket:
+                        # Check if it ends with ]} (reversed brackets) or incomplete
+                        if cleaned_str.rstrip().endswith(']}'):
+                            # Fix reversed brackets
+                            cleaned_str = cleaned_str.rstrip()[:-2] + '}]'
+                            end_pos = len(cleaned_str)
+                        elif cleaned_str.rstrip().endswith(']'):
+                            # Might be missing closing brace
+                            # Count open vs close braces
+                            open_braces = cleaned_str[first_bracket:].count('{')
+                            close_braces = cleaned_str[first_bracket:].count('}')
+                            if open_braces > close_braces:
+                                # Add missing closing braces
+                                cleaned_str = cleaned_str.rstrip()[:-1] + '}' * (open_braces - close_braces) + ']'
+                                end_pos = len(cleaned_str)
+                    
+                    if end_pos > first_bracket:
+                        json_str = cleaned_str[first_bracket:end_pos]
+                        
+                        # Fix reversed brackets if present
+                        if json_str.rstrip().endswith(']}'):
+                            json_str = json_str.rstrip()[:-2] + '}]'
+                            logger.warning("Fixed reversed closing brackets in JSON")
+                        
+                        # Try to parse the extracted JSON
+                        try:
+                            parsed_actions = json.loads(json_str)
+                            if isinstance(parsed_actions, list):
+                                actions = parsed_actions
+                                logger.info(f"Parsed {len(actions)} actions from answer field")
+                        except json.JSONDecodeError as parse_err:
+                            # If parsing fails, try to fix incomplete JSON
+                            logger.warning(f"Initial JSON parse failed: {parse_err}. Attempting to fix...")
+                            
+                            # Try to complete incomplete JSON objects
+                            # Find all complete objects before the error
+                            try:
+                                # Count braces to find where the last complete object ends
+                                brace_level = 0
+                                bracket_level = 0
+                                complete_objects = []
+                                current_obj_start = -1
+                                
+                                for i, char in enumerate(json_str):
+                                    if char == '[':
+                                        bracket_level += 1
+                                    elif char == ']':
+                                        bracket_level -= 1
+                                    elif char == '{':
+                                        if brace_level == 0:
+                                            current_obj_start = i
+                                        brace_level += 1
+                                    elif char == '}':
+                                        brace_level -= 1
+                                        if brace_level == 0 and bracket_level == 1:
+                                            # Complete object found
+                                            if current_obj_start >= 0:
+                                                obj_str = json_str[current_obj_start:i+1]
+                                                try:
+                                                    obj = json.loads(obj_str)
+                                                    complete_objects.append(obj)
+                                                except:
+                                                    pass
+                                
+                                if complete_objects:
+                                    actions = complete_objects
+                                    logger.info(f"Extracted {len(actions)} complete actions from incomplete JSON")
+                            except Exception as fix_err:
+                                logger.warning(f"Failed to fix incomplete JSON: {fix_err}")
+                    else:
+                        logger.warning("Could not find matching closing bracket for JSON array")
+                except Exception as e:
+                    logger.warning(f"Failed to parse answer as JSON: {e}")
+                    # Try one final fallback - extract what we can
+                    try:
+                        import re
+                        # Find all JSON objects in the string
+                        object_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
+                        matches = re.findall(object_pattern, answer_str)
+                        if matches:
+                            extracted_objects = []
+                            for match in matches:
+                                try:
+                                    obj = json.loads(match)
+                                    if isinstance(obj, dict) and obj.get("action"):
+                                        extracted_objects.append(obj)
+                                except:
+                                    pass
+                            if extracted_objects:
+                                actions = extracted_objects
+                                logger.info(f"Extracted {len(actions)} actions using regex fallback")
+                    except Exception as fallback_err:
+                        logger.warning(f"All JSON parsing attempts failed: {fallback_err}")
+        
         # Ensure actions is always a list
         if not isinstance(actions, list):
             actions = []
+        
+        logger.info(f"Extracted {len(actions)} actions from agent response. Actions: {[a.get('action') if isinstance(a, dict) else 'invalid' for a in actions[:5]]}")
+        
+        # Log if no actions found
+        if len(actions) == 0:
+            logger.warning(f"No actions found in result. Result keys: {result.keys() if isinstance(result, dict) else 'Not a dict'}")
+            logger.warning(f"Result sample: {str(result)[:500]}")
 
         created_project_id = None
         action_results = []
@@ -252,6 +404,8 @@ def project_pilot(request):
         if "answer" not in result or result["answer"] is None:
             result["answer"] = ""
 
+        logger.info(f"Processing {len(actions)} actions from project pilot agent")
+        
         # Process all actions in order
         for action_data in actions:
             action_type = action_data.get("action")
@@ -329,6 +483,7 @@ def project_pilot(request):
                     # Store it in the action_data for reference
                     action_data["_created_project_id"] = project.id
 
+                    logger.info(f"Project created successfully: {project.id} - {project.name}")
                     action_results.append(
                         {
                             "action": "create_project",
@@ -339,7 +494,14 @@ def project_pilot(request):
                         }
                     )
                 except Exception as e:
-                    action_results.append({"action": "create_project", "success": False, "error": str(e)})
+                    logger.exception(f"Error creating project: {str(e)}")
+                    logger.error(f"Project data: {project_data}")
+                    action_results.append({
+                        "action": "create_project",
+                        "success": False,
+                        "error": str(e),
+                        "project_name": action_data.get("project_name", "Unknown")
+                    })
 
         # Second pass: Create tasks and other actions, using created project IDs
         for action_data in actions:
@@ -353,7 +515,7 @@ def project_pilot(request):
                     # If no project_id specified, use the project created in this batch
                     if not task_project_id and created_project_id:
                         task_project_id = created_project_id
-                    
+
                     if not task_project_id:
                         action_results.append(
                             {
@@ -399,7 +561,7 @@ def project_pilot(request):
                             estimated_hours = float(estimated_hours)
                         except (ValueError, TypeError):
                             estimated_hours = None
-                    
+
                     task = Task.objects.create(
                         title=action_data.get("task_title", "New Task"),
                         description=action_data.get("task_description", ""),
@@ -487,7 +649,7 @@ def project_pilot(request):
                         continue
                     task_to_update = get_object_or_404(Task, id=task_id_to_update, project__created_by_company_user=company_user)
                     updates = action_data.get("updates", {})
-                    
+
                     # Assignee
                     if "assignee_id" in updates:
                         assignee_id = updates.get("assignee_id")
@@ -500,12 +662,12 @@ def project_pilot(request):
                                 pass
                         else:
                             task_to_update.assignee = None
-                    
+
                     # Update other fields
                     for field in ["status", "priority", "title", "description"]:
                         if field in updates:
                             setattr(task_to_update, field, updates[field])
-                    
+
                     task_to_update.save()
                     action_results.append(
                         {"action": "update_task", "success": True, "task_id": task_to_update.id}
@@ -515,7 +677,16 @@ def project_pilot(request):
                         {"action": "update_task", "success": False, "error": f"Error updating task: {str(e)}"}
                     )
 
+        # Check if any critical actions failed
+        project_created = any(
+            r.get("action") == "create_project" and r.get("success") for r in action_results
+        )
+        if not project_created and any(a.get("action") == "create_project" for a in actions):
+            # Project creation was attempted but failed
+            logger.warning("Project creation was attempted but failed. Action results: %s", action_results)
+        
         data = {"status": "success", "data": result, "action_results": action_results}
+        logger.info(f"Returning project_pilot response with {len(action_results)} action results")
         return Response(data, status=status.HTTP_200_OK)
 
     except Exception as e:
@@ -774,14 +945,14 @@ def timeline_gantt(request):
 
         project = get_object_or_404(Project, id=project_id, created_by_company_user=company_user)
         tasks_queryset = Task.objects.filter(project=project, project__created_by_company_user=company_user)
-        
+
         tasks = [
-            {
-                "id": t.id,
-                "title": t.title,
-                "status": t.status,
-                "priority": t.priority,
-                "due_date": t.due_date.isoformat() if t.due_date else None,
+                {
+                    "id": t.id,
+                    "title": t.title,
+                    "status": t.status,
+                    "priority": t.priority,
+                    "due_date": t.due_date.isoformat() if t.due_date else None,
                 "estimated_hours": t.estimated_hours,
             }
             for t in tasks_queryset
@@ -886,18 +1057,18 @@ def knowledge_qa(request):
                     "description": project.description,
                     "status": project.status,
                     "priority": project.priority,
-                    "tasks": [
-                        {
-                            "id": t.id,
-                            "title": t.title,
-                            "status": t.status,
-                            "priority": t.priority,
-                            "description": t.description,
-                            "assignee_id": t.assignee.id if t.assignee else None,
-                            "assignee_username": t.assignee.username if t.assignee else None,
-                        }
-                        for t in tasks
-                    ],
+                "tasks": [
+                    {
+                        "id": t.id,
+                        "title": t.title,
+                        "status": t.status,
+                        "priority": t.priority,
+                        "description": t.description,
+                        "assignee_id": t.assignee.id if t.assignee else None,
+                        "assignee_username": t.assignee.username if t.assignee else None,
+                    }
+                    for t in tasks
+                ],
                 },
                 "all_projects": [
                     {

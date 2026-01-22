@@ -17,7 +17,6 @@ import {
   Calendar, 
   ListChecks,
   Loader2,
-  LogOut,
   FolderKanban,
   Sparkles,
   TrendingUp,
@@ -25,7 +24,8 @@ import {
   Building2,
   ArrowLeft,
   UserCheck,
-  Plus
+  Plus,
+  Megaphone
 } from 'lucide-react';
 import ProjectPilotAgent from '@/components/pm-agent/ProjectPilotAgent';
 import TaskPrioritizationAgent from '@/components/pm-agent/TaskPrioritizationAgent';
@@ -33,6 +33,7 @@ import KnowledgeQAAgent from '@/components/pm-agent/KnowledgeQAAgent';
 import TimelineGanttAgent from '@/components/pm-agent/TimelineGanttAgent';
 import ManualProjectCreation from '@/components/pm-agent/ManualProjectCreation';
 import ManualTaskCreation from '@/components/pm-agent/ManualTaskCreation';
+import DashboardNavbar from '@/components/common/DashboardNavbar';
 
 const ProjectManagerDashboardPage = () => {
   const [projects, setProjects] = useState([]);
@@ -43,10 +44,25 @@ const ProjectManagerDashboardPage = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   
+  // Get company user from localStorage
+  const [companyUser, setCompanyUser] = useState(null);
+  
+  useEffect(() => {
+    // Get company user from localStorage
+    const companyUserStr = localStorage.getItem('company_user');
+    if (companyUserStr) {
+      try {
+        const user = JSON.parse(companyUserStr);
+        setCompanyUser(user);
+      } catch (error) {
+        console.error('Error parsing company user:', error);
+      }
+    }
+  }, []);
+  
   // Check if user is a company user
   const isCompanyUser = () => {
-    const companyUserStr = localStorage.getItem('company_user');
-    return !!companyUserStr;
+    return !!companyUser;
   };
 
   useEffect(() => {
@@ -95,12 +111,19 @@ const ProjectManagerDashboardPage = () => {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-      navigate('/login');
-    } catch (error) {
-      console.error('Logout error:', error);
+  const handleLogout = () => {
+    if (isCompanyUser()) {
+      // Company user logout
+      localStorage.removeItem('company_auth_token');
+      localStorage.removeItem('company_user');
+      navigate('/company/login');
+    } else {
+      // Regular user logout
+      logout().then(() => {
+        navigate('/login');
+      }).catch((error) => {
+        console.error('Logout error:', error);
+      });
     }
   };
 
@@ -123,60 +146,42 @@ const ProjectManagerDashboardPage = () => {
 
       <div className="min-h-screen bg-background">
         {/* Header */}
-        <header className="border-b bg-card">
-          <div className="container mx-auto px-4 py-4">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <BrainCircuit className="h-8 w-8 text-primary" />
-                <div>
-                  <h1 className="text-2xl font-bold">Project Manager Dashboard</h1>
-                  <p className="text-sm text-muted-foreground">
-                    AI-powered project management
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="text-right">
-                  <p className="text-sm font-medium">{user?.email}</p>
-                  <p className="text-xs text-muted-foreground">Project Manager</p>
-                </div>
-                <Button variant="outline" onClick={handleLogout}>
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Logout
-                </Button>
-              </div>
-            </div>
-            {/* Navigation Tabs */}
-            {isCompanyUser() && (
-              <div className="flex gap-2 border-t pt-4">
-                <Button
-                  variant={activeSection === 'dashboard' ? 'default' : 'ghost'}
-                  onClick={() => navigate('/company/dashboard')}
-                  className="flex items-center gap-2"
-                >
-                  <Building2 className="h-4 w-4" />
-                  Dashboard
-                </Button>
-                <Button
-                  variant={activeSection === 'project-manager' ? 'default' : 'ghost'}
-                  onClick={() => setActiveSection('project-manager')}
-                  className="flex items-center gap-2"
-                >
-                  <BrainCircuit className="h-4 w-4" />
-                  Project Manager Agent
-                </Button>
-                <Button
-                  variant={activeSection === 'recruitment' ? 'default' : 'ghost'}
-                  onClick={() => navigate('/company/dashboard?section=recruitment')}
-                  className="flex items-center gap-2"
-                >
-                  <UserCheck className="h-4 w-4" />
-                  Recruitment Agent
-                </Button>
-              </div>
-            )}
-          </div>
-        </header>
+        <DashboardNavbar
+          icon={BrainCircuit}
+          title={companyUser?.companyName || "Project Manager Dashboard"}
+          subtitle={companyUser ? companyUser.fullName : "AI-powered project management"}
+          user={companyUser || user}
+          userRole={companyUser ? "Company User" : "Project Manager"}
+          showNavTabs={isCompanyUser()}
+          activeSection={activeSection}
+          onLogout={handleLogout}
+          navItems={isCompanyUser() ? [
+            {
+              label: 'Dashboard',
+              icon: Building2,
+              section: 'dashboard',
+              onClick: () => navigate('/company/dashboard'),
+            },
+            {
+              label: 'Project Manager Agent',
+              icon: BrainCircuit,
+              section: 'project-manager',
+              onClick: () => navigate('/project-manager/dashboard'),
+            },
+            {
+              label: 'Recruitment Agent',
+              icon: UserCheck,
+              section: 'recruitment',
+              onClick: () => navigate('/recruitment/dashboard'),
+            },
+            {
+              label: 'Marketing Agent',
+              icon: Megaphone,
+              section: 'marketing',
+              onClick: () => navigate('/marketing/dashboard'),
+            },
+          ] : []}
+        />
 
         {/* Main Content */}
         <main className="container mx-auto px-4 py-8">
