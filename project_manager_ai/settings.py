@@ -339,6 +339,7 @@ if USE_SQL_SERVER:
     
     db_config = {
         'ENGINE': 'mssql',
+
         'NAME': DB_NAME,
         'HOST': DB_HOST,
         'OPTIONS': {
