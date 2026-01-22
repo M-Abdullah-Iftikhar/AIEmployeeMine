@@ -35,7 +35,7 @@ class SubtaskGenerationAgent(BaseAgent):
         """
         self.log_action("Generating subtasks", {"task_id": task.get('id'), "task_title": task.get('title')})
         
-        prompt = f"""You are an expert at breaking down tasks into detailed, actionable subtasks.
+        prompt = f"""You are an expert at breaking down tasks into detailed, actionable subtasks with comprehensive descriptions.
 
 Task Information:
 - Title: {task.get('title', 'Unknown')}
@@ -43,26 +43,38 @@ Task Information:
 - Status: {task.get('status', 'todo')}
 - Priority: {task.get('priority', 'medium')}
 
-Your goal is to break down this task into 4-8 detailed, actionable subtasks that help someone understand exactly what they need to do to complete this task.
+Your goal is to break down this task into 4-8 detailed, actionable subtasks that help someone understand exactly what they need to do to complete this task efficiently.
+
+CRITICAL REQUIREMENTS for subtask descriptions:
+Each subtask description must be COMPREHENSIVE (4-5 sentences) and include:
+1. WHAT the subtask is - Clear explanation of what needs to be accomplished in this step
+2. HOW to do it - Step-by-step methodology and approach specific to this subtask
+3. WHICH TOOLS to use - Specific technologies, frameworks, libraries, commands, or tools needed for this subtask
+4. MOST EFFICIENT WAY - Best practices, shortcuts, optimizations, and efficient approaches for this specific subtask
 
 IMPORTANT: You must also provide a DETAILED reasoning explaining:
 - WHY this task should be broken down in this specific way
 - HOW the subtasks relate to each other and the overall task goal
-- WHAT approach or methodology should be used to complete this task
+- WHAT approach or methodology should be used to complete this task most efficiently
 - WHAT potential challenges or considerations need to be addressed
-- HOW to execute these subtasks effectively
+- HOW to execute these subtasks effectively and in the right order
 
 Guidelines for creating subtasks:
 1. Make each subtask specific and actionable (someone should be able to understand what to do)
-2. Cover all aspects of the task (planning, implementation, testing, documentation if needed)
-3. Order subtasks logically (what should be done first, second, etc.)
+2. Cover all aspects of the task (planning, setup, implementation, testing, documentation if needed)
+3. Order subtasks logically (what should be done first, second, etc.) for maximum efficiency
 4. Make subtasks granular enough to be meaningful but not too small
 5. Consider the task's domain/context when creating subtasks
 6. Include setup, implementation, and verification steps when appropriate
+7. Ensure subtasks flow logically and build upon each other for efficient completion
 
 For each subtask, provide:
-- title: A clear, specific title (e.g., "Set up development environment" or "Implement user authentication API endpoint")
-- description: A detailed explanation (2-3 sentences) of what needs to be done, why it's important, and expected outcomes
+- title: A clear, specific title (e.g., "Set up OAuth integration with Instagram API" or "Design database schema for trust ledger")
+- description: A COMPREHENSIVE description (4-5 sentences) that includes:
+  * WHAT the subtask is - what needs to be accomplished
+  * HOW to do it - step-by-step approach and methodology
+  * WHICH TOOLS to use - specific tools, technologies, frameworks, or commands
+  * MOST EFFICIENT WAY - best practices, optimizations, and efficient approaches
 - order: The sequence number (1, 2, 3, etc.) indicating when this subtask should be done
 
 Return a JSON object with this structure:
@@ -70,25 +82,25 @@ Return a JSON object with this structure:
   "subtasks": [
     {{
       "title": "Specific subtask title",
-      "description": "Detailed description of what needs to be done, why it's important, and expected outcomes. This should help someone understand exactly what to do.",
+      "description": "COMPREHENSIVE description (4-5 sentences): WHAT this subtask accomplishes, HOW to do it step-by-step, WHICH TOOLS/technologies to use, and the MOST EFFICIENT WAY to complete it. Make it detailed enough that a developer can understand exactly what to do and how to do it efficiently.",
       "order": 1
     }},
     {{
       "title": "Next subtask title",
-      "description": "Detailed description...",
+      "description": "COMPREHENSIVE description (4-5 sentences) following the same format...",
       "order": 2
     }}
   ],
-  "task_reasoning": "DETAILED explanation (4-6 sentences): WHY this task should be broken down in this specific way, HOW the subtasks relate to each other and the overall task goal, WHAT approach or methodology should be used to complete this task, WHAT potential challenges or considerations need to be addressed, and HOW to execute these subtasks effectively."
+  "task_reasoning": "DETAILED explanation (5-7 sentences): WHY this task should be broken down in this specific way, HOW the subtasks relate to each other and flow logically for efficient completion, WHAT approach or methodology should be used to complete this task most efficiently, WHAT potential challenges or considerations need to be addressed, HOW to execute these subtasks effectively, and WHAT the overall strategy is for completing this task efficiently."
 }}
 
 Rules:
 - Return ONLY the JSON object, no explanations
-- Create 4-8 subtasks (adjust based on task complexity)
+- Create 4-8 subtasks (adjust based on task complexity - more complex tasks need more subtasks)
 - Make subtasks specific to this task (not generic)
-- Order subtasks logically (order field: 1, 2, 3, etc.)
-- Each subtask should be actionable and clear
-- Include detailed task_reasoning explaining the breakdown strategy"""
+- Order subtasks logically (order field: 1, 2, 3, etc.) for efficient execution
+- Each subtask description must be COMPREHENSIVE (4-5 sentences) covering WHAT, HOW, WHICH TOOLS, and MOST EFFICIENT WAY
+- Include detailed task_reasoning explaining the breakdown strategy and efficiency considerations"""
 
         try:
             response = self._call_llm(prompt, self.system_prompt, temperature=0.5, max_tokens=2048)

@@ -13,8 +13,8 @@ import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { contactService, careerService, companyService } from '@/services';
 import { aiPredictorService } from '@/services/aiPredictorService';
+import DashboardNavbar from '@/components/common/DashboardNavbar';
 import { 
-  LogOut, 
   Search, 
   Mail, 
   Phone, 
@@ -570,28 +570,15 @@ const AdminDashboardPage = () => {
 
       <div className="min-h-screen bg-background">
         {/* Header */}
-        <header className="border-b bg-card sticky top-0 z-40">
-          <div className="container mx-auto px-4 py-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div>
-                <h1 className="text-xl sm:text-2xl font-bold">Admin Dashboard</h1>
-                <p className="text-xs sm:text-sm text-muted-foreground">
-                  Manage submissions and predictions
-                </p>
-              </div>
-              <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto">
-                <div className="text-right flex-1 sm:flex-none">
-                  <p className="text-xs sm:text-sm font-medium truncate max-w-[150px] sm:max-w-none">{user?.email}</p>
-                  <p className="text-xs text-muted-foreground hidden sm:block">Admin</p>
-                </div>
-                <Button variant="outline" onClick={handleLogout} size="sm" className="shrink-0">
-                  <LogOut className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Logout</span>
-                </Button>
-              </div>
-            </div>
-          </div>
-        </header>
+        <DashboardNavbar
+          icon={BrainCircuit}
+          title="Admin Dashboard"
+          subtitle="Manage submissions and predictions"
+          user={user}
+          userRole="Admin"
+          showNavTabs={false}
+          onLogout={handleLogout}
+        />
 
         <div className="container mx-auto px-4 py-4 sm:py-6 lg:py-8">
           {/* Tabs */}

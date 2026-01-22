@@ -22,10 +22,23 @@ class ProjectPilotAgent(BaseAgent):
     
     def __init__(self):
         super().__init__()
-        self.system_prompt = """You are a Project Pilot Agent for a project management system.
-        Your role is to handle action requests like creating and deleting projects and tasks.
-        You extract action details from user requests and return structured JSON.
-        You should be precise and follow instructions carefully."""
+        self.system_prompt = """You are an intelligent Project Pilot Agent for a project management system.
+        Your role is to understand user intent and handle action requests like creating and deleting projects and tasks.
+        
+        CRITICAL INSTRUCTIONS:
+        1. Always analyze the FULL context of the user's request before deciding what action to take
+        2. Understand the INTENT behind the request, not just keywords
+        3. If the request is ambiguous or unclear, ASK FOR CLARIFICATION rather than making assumptions
+        4. Distinguish clearly between:
+           - Creating NEW projects vs updating existing tasks
+           - Creating NEW tasks vs updating existing tasks
+           - Adding tasks to existing projects vs creating new projects
+        5. Only update existing tasks if the user EXPLICITLY asks to update/modify specific existing tasks
+        6. When creating a new project, NEVER update existing tasks - always create new tasks
+        7. Be thoughtful and reason through each request before responding
+        
+        You extract action details from user requests and return structured JSON, but ONLY when the intent is clear.
+        If ambiguous, ask for clarification with helpful questions."""
     
     def handle_action_request(self, question: str, context: Optional[Dict] = None, available_users: Optional[List[Dict]] = None) -> Dict:
         """
@@ -43,16 +56,58 @@ class ProjectPilotAgent(BaseAgent):
         
         question_lower = question.lower()
         
-        # Distinguish between different types of requests
+        # Distinguish between different types of requests with better context awareness
         assignment_keywords = ['assign', 'reassign', 'delegate']
-        creation_keywords = ['create', 'add', 'make', 'new task', 'add task', 'new project', 'make project']
+        creation_keywords = ['create', 'add', 'make', 'new task', 'add task', 'new project', 'make project', 'build', 'develop', 'design', 'start']
         deletion_keywords = ['delete', 'remove', 'destroy', 'drop']
+        # Update keywords should NOT trigger if context suggests creation
+        # Only treat as update if explicitly about modifying existing items
         update_keywords = ['update', 'change', 'modify', 'edit', 'set', 'adjust', 'alter']
         
-        is_assignment_request = any(keyword in question_lower for keyword in assignment_keywords)
-        is_creation_request = any(keyword in question_lower for keyword in creation_keywords)
-        is_deletion_request = any(keyword in question_lower for keyword in deletion_keywords)
-        is_update_request = any(keyword in question_lower for keyword in update_keywords)
+        # Better detection: check for explicit update context
+        # If user says "create new project" or "create me a project", it's creation NOT update
+        has_explicit_creation = any(phrase in question_lower for phrase in [
+            'create', 'make', 'build', 'develop', 'design', 'new project', 'new task',
+            'create me', 'create a', 'make a', 'build a', 'start a'
+        ])
+        
+        # Check if user is describing a project/system with features, modules, services
+        # This indicates a NEW PROJECT creation request even without explicit creation keywords
+        project_description_indicators = [
+            'is a', 'is an', 'centralized', 'dashboard', 'system', 'platform', 'application',
+            'has following', 'has the following', 'with features', 'features:', 'modules:', 'services:',
+            'key features', 'core infrastructure', 'purpose:', 'target users', 'tech angle',
+            'external apis', 'module', 'service', 'infrastructure layer'
+        ]
+        has_project_description = any(indicator in question_lower for indicator in project_description_indicators)
+        
+        # Check if query contains detailed project specifications (multiple lines, features, etc.)
+        is_detailed_spec = len(question.split('\n')) > 2 or (
+            any(word in question_lower for word in ['features', 'modules', 'services', 'infrastructure', 'api', 'dashboard']) and
+            len(question) > 100
+        )
+        
+        # If user describes a project/system in detail, treat it as creation request
+        if has_project_description or is_detailed_spec:
+            has_explicit_creation = True
+        
+        # Update should only trigger if explicitly about existing items
+        has_explicit_update_context = any(phrase in question_lower for phrase in [
+            'update existing', 'update the', 'update this', 'modify existing', 'change existing',
+            'edit existing', 'update task', 'update project', 'modify task', 'change task'
+        ])
+        
+        is_assignment_request = any(keyword in question_lower for keyword in assignment_keywords) and not has_explicit_creation
+        is_creation_request = has_explicit_creation
+        # IMPORTANT: Only detect deletion if explicitly about deletion AND not describing a new project
+        # If user is describing a project/system in detail, it's creation NOT deletion
+        is_deletion_request = (
+            any(keyword in question_lower for keyword in deletion_keywords) and
+            not has_project_description and
+            not is_detailed_spec
+        )
+        # Only treat as update if explicitly about updating existing items AND not creating
+        is_update_request = any(keyword in question_lower for keyword in update_keywords) and has_explicit_update_context and not has_explicit_creation
         is_action_request = is_assignment_request or is_creation_request or is_deletion_request or is_update_request
         
         # Check for things the agent CANNOT do
@@ -271,8 +326,11 @@ Return a helpful text response (NOT JSON) asking for clarification:
 - Or which task(s) do you want to delete? (e.g., 'delete task Y' or 'delete all tasks in Project X')
 
 Do NOT return JSON. Do NOT delete anything."""
-            # Handle update requests
-            elif is_update_request:
+            # Handle update requests - ONLY if explicitly about updating existing items
+            elif is_update_request and has_explicit_update_context:
+                # Verify that user is actually asking to update existing tasks/projects
+                # NOT asking to create something new
+                
                 # Check if it's an update request for tasks or projects
                 priority_keywords = ['priority', 'priorities', 'prioritize']
                 status_keywords = ['status', 'state']
@@ -283,6 +341,45 @@ Do NOT return JSON. Do NOT delete anything."""
                 is_status_update = any(keyword in question_lower for keyword in status_keywords)
                 is_task_update = any(keyword in question_lower for keyword in task_keywords)
                 is_project_update = any(keyword in question_lower for keyword in project_keywords)
+                
+                # CRITICAL: Check if user mentions specific existing task IDs or task titles
+                # If no specific tasks mentioned, it might be ambiguous
+                has_specific_task_reference = False
+                if context.get('tasks'):
+                    for task in context['tasks']:
+                        task_title = task.get('title', '').lower()
+                        task_id = task.get('id')
+                        # Check if task title or ID is mentioned in question
+                        if task_title and task_title in question_lower:
+                            has_specific_task_reference = True
+                            break
+                        # Check for task ID patterns
+                        if task_id and (f'task {task_id}' in question_lower or f'task_id {task_id}' in question_lower):
+                            has_specific_task_reference = True
+                            break
+                
+                # If user wants to update but doesn't specify which tasks, ask for clarification
+                if is_task_update and not has_specific_task_reference and not ('all' in question_lower and 'task' in question_lower):
+                    prompt = f"""The user wants to update tasks, but their request is unclear.
+
+{context_str}
+{users_str}
+
+User Request: {question}
+
+I understand you want to update tasks, but I need clarification:
+- Which specific task(s) do you want to update? Please mention the task title or ID.
+- Or do you want to update all tasks in a specific project?
+- What exactly do you want to change? (priority, status, assignee, description, etc.)
+
+Please provide more details so I can help you correctly.
+
+Examples:
+- "Update task 'Database Design' to high priority"
+- "Change status of all tasks in Project X to in_progress"
+- "Update task ID 186 to high priority"
+
+Do NOT return JSON. Do NOT update anything yet."""
                 
                 # Determine target project
                 target_project_id = None
@@ -395,10 +492,38 @@ Example response:
 Return ONLY text - NO JSON, NO actions."""
             else:
                 # Determine if user wants NEW project or tasks in EXISTING project
-                # More flexible detection: "create me a [name] project" or "create [name] project" should be detected
+                # More flexible and intelligent detection
                 new_project_indicators = ['new project', 'create project', 'make project', 'add project', 'start project',
-                                         'create me a', 'create a', 'make a', 'build a', 'start a']
+                                         'create me a', 'create a', 'make a', 'build a', 'start a', 'develop a', 'design a',
+                                         'which has', 'with features', 'with following', 'that has']
                 wants_new_project = any(indicator in question_lower for indicator in new_project_indicators)
+                
+                # Additional context: if user describes features, modules, or services, it's likely a new project
+                # Check for detailed project descriptions even without explicit creation keywords
+                project_descriptor_patterns = [
+                    'has following features', 'with features', 'which has', 'that has',
+                    'features:', 'modules:', 'services:', 'core infrastructure',
+                    'purpose:', 'external apis:', 'module', 'is a', 'is an',
+                    'centralized dashboard', 'system', 'platform', 'application',
+                    'key features', 'target users', 'tech angle', 'infrastructure layer',
+                    'trust ledger', 'dynamic', 'aggregates', 'real-time', 'breakdown visuals',
+                    'quantifies', 'dashboard', 'service', 'architecture'
+                ]
+                has_project_descriptors = any(pattern in question_lower for pattern in project_descriptor_patterns)
+                
+                # Check if query is a detailed project/system description
+                # If it describes what a system IS and what it DOES, it's a new project request
+                is_detailed_project_description = (
+                    len(question.split('\n')) > 2 or len(question) > 150
+                ) and (
+                    has_project_descriptors or
+                    any(word in question_lower for word in ['features', 'modules', 'services', 'infrastructure', 'dashboard', 'system'])
+                )
+                
+                # If user describes a project/system in detail, treat it as NEW PROJECT creation
+                # Even without explicit "create" or "make" keywords
+                if has_project_descriptors or is_detailed_project_description:
+                    wants_new_project = True
                 
                 # Also check if user mentions a project name that doesn't exist in context (likely a new project)
                 if not wants_new_project and context.get('all_projects'):
@@ -480,52 +605,82 @@ The user wants tasks assigned ONLY to these specific users mentioned in their re
                     else:
                         assignment_instruction = "\n- Use available user IDs from the list above if assignment is requested, otherwise leave assignee_id as null"
                     
-                    prompt = f"""You are an AI assistant that extracts actions from user requests. Analyze the request and return ONLY valid JSON.
+                    prompt = f"""You are an intelligent AI assistant that understands user intent and extracts actions from requests. 
+
+CRITICAL: The user wants to CREATE A NEW PROJECT. They are NOT asking to update existing tasks.
+- DO NOT return update_task actions
+- DO NOT modify existing tasks
+- ONLY return create_project and create_task actions
 
 {context_str}
 {users_str}
 
 User Request: {question}
 
-The user wants to create a NEW project with tasks.
-{assignment_instruction}
+ANALYSIS:
+1. This is a NEW PROJECT creation request
+2. The user has provided detailed features/modules/services to include
+3. You must create a NEW project and NEW tasks - NOT update existing ones
 
-Extract the actions and return a JSON ARRAY:
-1. First: create_project action
-2. Then: 5-10 create_task actions (set project_id to null - will be linked automatically)
+REQUIRED ACTIONS:
+1. First: create_project action with a descriptive name and comprehensive description
+2. Then: 10-20 create_task actions breaking down all features/modules/services mentioned
+
+{assignment_instruction}
 
 Return ONLY this JSON format (no other text):
 [
     {{
         "action": "create_project",
-        "project_name": "exact project name from request",
-        "project_description": "description from request or empty string",
+        "project_name": "Descriptive project name based on the system being built",
+        "project_description": "Comprehensive description based on all features, modules, and services mentioned in the request. Include purpose, core infrastructure, modules, and external integrations.",
         "project_status": "planning",
         "project_priority": "medium",
         "deadline_days": null,
-        "reasoning": "brief explanation"
+        "reasoning": "Brief explanation of why this project is being created based on the user's requirements"
     }},
     {{
         "action": "create_task",
-        "task_title": "specific task title",
-        "task_description": "task description",
+        "task_title": "Specific task title that covers one feature/module/service",
+        "task_description": "COMPREHENSIVE task description (4-6 sentences) that includes: (1) WHAT the task is - clear explanation of what needs to be accomplished, (2) HOW to do it - step-by-step approach and methodology, (3) WHICH TOOLS to use - specific technologies, frameworks, libraries, and tools recommended, (4) MOST EFFICIENT WAY - best practices and efficient approaches to complete this task, including any shortcuts or optimizations. Make it actionable and detailed enough that a developer can understand exactly what to build and how to approach it.",
         "project_id": null,
         "assignee_id": user_id_or_null,
-        "priority": "medium",
+        "priority": "high|medium|low",
         "status": "todo",
-        "reasoning": "Detailed AI reasoning and implementation suggestions: Explain WHY this task is important, HOW to implement it (step-by-step approach), what technologies/frameworks to use, potential challenges, and best practices. Provide actionable guidance that helps developers understand how to approach and complete this task."
+        "reasoning": "DETAILED AI reasoning and judgment (5-7 sentences) that includes: (1) WHY this task is important for the overall project and how it contributes to project completion, (2) TASK BREAKDOWN - logical decomposition of the task into manageable components, (3) EFFICIENCY ANALYSIS - reasoning about the most efficient approach considering dependencies, resources, and project timeline, (4) TECHNICAL DECISIONS - explanation of technology choices and why they're optimal for this specific task, (5) RISK ASSESSMENT - potential challenges and how to mitigate them, (6) BEST PRACTICES - industry standards and patterns to follow, (7) COMPLETION STRATEGY - recommended order and approach to ensure this task is completed most efficiently. Provide strategic thinking that helps ensure the project can be completed efficiently."
     }}
 ]
 
-Rules:
-- Return ONLY the JSON array, no explanations
-- Break down projects into 8-15 logical tasks covering all major features of the system
-- Create comprehensive tasks that cover: database design, backend API, frontend UI, authentication, core features, testing, deployment
-- For each task's "reasoning" field, provide DETAILED implementation guidance (3-5 sentences) including: why the task matters, step-by-step approach, technologies/tools to use, potential challenges, and best practices
+CRITICAL RULES:
+- Return ONLY the JSON array, no explanations or text outside JSON
+- NEVER include update_task actions when creating a new project
+- Break down ALL features/modules/services mentioned into separate tasks
+- Create 10-20 tasks that comprehensively cover:
+  * Core Infrastructure Layer (Auth, Data Warehouse, Event Bus, Audit, Notifications)
+  * All modules/services mentioned (e.g., creator-profile-service, avatar-classification-service, etc.)
+  * External API integrations (Meta Graph API, TikTok API, YouTube API, etc.)
+  * Database design and schema
+  * Backend API design
+  * Frontend UI (if applicable)
+  * Testing and deployment
+- For each task's "task_description" field, provide COMPREHENSIVE description (4-6 sentences) covering:
+  * WHAT the task is - clear explanation
+  * HOW to do it - step-by-step methodology
+  * WHICH TOOLS to use - specific technologies/frameworks
+  * MOST EFFICIENT WAY - best practices and optimizations
+- For each task's "reasoning" field, provide DETAILED strategic reasoning (5-7 sentences) covering:
+  * WHY it's important and how it contributes to project completion
+  * Task breakdown and component analysis
+  * Efficiency analysis with dependencies and timeline consideration
+  * Technical decisions and rationale
+  * Risk assessment and mitigation strategies
+  * Best practices and industry standards
+  * Completion strategy for maximum efficiency
+- Generate tasks with proper reasoning and judgment to ensure project can be completed most efficiently
+- Consider task dependencies and optimal ordering for efficient project completion
 - {assignment_instruction}
-- If specific usernames were mentioned in the request, match them to the available users list by username and use those user IDs
-- Set project_id to null for tasks (they'll be linked to the new project automatically)
-- Create a detailed project description based on the system type (e.g., "Bank Management System" should include features like account management, transactions, reporting, etc.)"""
+- Set project_id to null for all tasks (they'll be linked to the new project automatically)
+- Create a detailed project description that summarizes all features/modules/services mentioned"""
                 elif existing_project_mentioned or context.get('project'):
                     # User wants tasks in EXISTING project
                     target_project_id = project_id_to_use or (context.get('project', {}).get('id') if context.get('project') else None)
@@ -568,12 +723,12 @@ Return ONLY this JSON format (no other text):
     {{
         "action": "create_task",
         "task_title": "specific task title",
-        "task_description": "task description",
+        "task_description": "COMPREHENSIVE task description (4-6 sentences) that includes: (1) WHAT the task is - clear explanation of what needs to be accomplished, (2) HOW to do it - step-by-step approach and methodology, (3) WHICH TOOLS to use - specific technologies, frameworks, libraries, and tools recommended, (4) MOST EFFICIENT WAY - best practices and efficient approaches to complete this task, including any shortcuts or optimizations. Make it actionable and detailed enough that a developer can understand exactly what to build and how to approach it.",
         "project_id": {target_project_id},
         "assignee_id": user_id_or_null,
         "priority": "medium",
         "status": "todo",
-        "reasoning": "Detailed AI reasoning and implementation suggestions: Explain WHY this task is important, HOW to implement it (step-by-step approach), what technologies/frameworks to use, potential challenges, and best practices. Provide actionable guidance that helps developers understand how to approach and complete this task."
+        "reasoning": "DETAILED AI reasoning and judgment (5-7 sentences) that includes: (1) WHY this task is important for the overall project and how it contributes to project completion, (2) TASK BREAKDOWN - logical decomposition of the task into manageable components, (3) EFFICIENCY ANALYSIS - reasoning about the most efficient approach considering dependencies, resources, and project timeline, (4) TECHNICAL DECISIONS - explanation of technology choices and why they're optimal for this specific task, (5) RISK ASSESSMENT - potential challenges and how to mitigate them, (6) BEST PRACTICES - industry standards and patterns to follow, (7) COMPLETION STRATEGY - recommended order and approach to ensure this task is completed most efficiently. Provide strategic thinking that helps ensure the project can be completed efficiently."
     }}
 ]
 
@@ -583,12 +738,49 @@ Rules:
 - Use project_id: {target_project_id} for all tasks
 - Break down into logical tasks if multiple tasks requested (create 8-15 tasks covering all features)
 - Create comprehensive tasks that cover: database design, backend API, frontend UI, authentication, core features, testing, deployment
-- For each task's "reasoning" field, provide DETAILED implementation guidance (3-5 sentences) including: why the task matters, step-by-step approach, technologies/tools to use, potential challenges, and best practices
+- For each task's "task_description" field, provide COMPREHENSIVE description (4-6 sentences) covering:
+  * WHAT the task is - clear explanation
+  * HOW to do it - step-by-step methodology
+  * WHICH TOOLS to use - specific technologies/frameworks
+  * MOST EFFICIENT WAY - best practices and optimizations
+- For each task's "reasoning" field, provide DETAILED strategic reasoning (5-7 sentences) covering:
+  * WHY it's important and how it contributes to project completion
+  * Task breakdown and component analysis
+  * Efficiency analysis with dependencies and timeline consideration
+  * Technical decisions and rationale
+  * Risk assessment and mitigation strategies
+  * Best practices and industry standards
+  * Completion strategy for maximum efficiency
+- Generate tasks with proper reasoning and judgment to ensure project can be completed most efficiently
+- Consider task dependencies and optimal ordering for efficient project completion
 - {assignment_instruction}
 - If specific usernames were mentioned in the request, match them to the available users list by username and use those user IDs"""
                 else:
-                    # Ambiguous request - ask for clarification instead of guessing
-                    prompt = f"""The user's request is unclear or you cannot determine what they want.
+                    # Ambiguous request - analyze more carefully before asking for clarification
+                    # Check if there are hints that suggest project creation despite lack of explicit keywords
+                    has_system_features = any(word in question_lower for word in [
+                        'features', 'modules', 'services', 'system', 'infrastructure', 'api', 'database', 
+                        'layer', 'purpose', 'dashboard', 'platform', 'application', 'quantifies', 
+                        'aggregates', 'trust ledger', 'centralized', 'key features', 'target users', 
+                        'tech angle', 'real-time', 'breakdown visuals'
+                    ])
+                    has_detailed_description = len(question.split('\n')) > 2 or len(question) > 100
+                    has_project_name = any(word[0].isupper() for word in question.split() if len(word) > 2)
+                    
+                    # Check if it describes what a system IS and what it DOES (strong indicator of new project)
+                    is_system_description = (
+                        ('is a' in question_lower or 'is an' in question_lower) and
+                        (has_system_features or has_detailed_description)
+                    )
+                    
+                    if has_system_features or has_detailed_description or is_system_description:
+                        # Likely a project creation request with detailed specs - NEVER treat as deletion
+                        prompt = f"""You are an intelligent AI assistant analyzing a user request.
+
+CRITICAL: The user has provided detailed features/modules/services or described a system/platform. 
+This STRONGLY indicates they want to CREATE A NEW PROJECT. This is NOT a deletion request. 
+
+CRITICAL: The user has provided detailed features/modules/services. This indicates they want to CREATE A NEW PROJECT.
 
 {context_str}
 {users_str}
@@ -596,27 +788,84 @@ Rules:
 User Request: {question}
 
 ANALYSIS:
-- User did NOT explicitly say "new project" or "create project"
-- User may have mentioned an existing project, but the request is unclear
-- The request might be about assigning, updating, or managing existing tasks/projects (which you cannot do)
+1. User described features/modules/services = WANTS NEW PROJECT
+2. Detailed specification indicates a NEW system to be built
+3. This is NOT about updating existing tasks
+4. This is NOT about adding tasks to existing project (no specific project mentioned)
 
-You should NOT create any projects or tasks. Instead, respond with a clarification message.
+REQUIRED ACTION: Create a NEW project with tasks covering all mentioned features/modules/services.
 
-Return a helpful text response (NOT JSON) saying:
-"I didn't fully understand your request. Could you please clarify:
-- Do you want to create a NEW project? (Please explicitly say 'create new project' or 'make new project')
-- Do you want to create tasks in an EXISTING project? (Please mention the project name and say 'create tasks')
-- Or are you asking about something else?
+{assignment_instruction}
 
-I can help you:
-- Create new projects (when you explicitly ask for a 'new project')
-- Create tasks in existing projects
-- Update existing tasks (priority, status, assignee, due_date, etc.)
-- Delete projects and tasks
+Return ONLY this JSON format (no other text):
+[
+    {{
+        "action": "create_project",
+        "project_name": "Descriptive name based on the system described",
+        "project_description": "Comprehensive description covering ALL features, modules, services, infrastructure, and external integrations mentioned in the request",
+        "project_status": "planning",
+        "project_priority": "medium",
+        "deadline_days": null,
+        "reasoning": "User wants to build a new system with the specified features and modules"
+    }},
+    {{
+        "action": "create_task",
+        "task_title": "Task title covering one feature/module/service",
+        "task_description": "COMPREHENSIVE task description (4-6 sentences) that includes: (1) WHAT the task is - clear explanation of what needs to be accomplished, (2) HOW to do it - step-by-step approach and methodology, (3) WHICH TOOLS to use - specific technologies, frameworks, libraries, and tools recommended, (4) MOST EFFICIENT WAY - best practices and efficient approaches to complete this task, including any shortcuts or optimizations. Make it actionable and detailed enough that a developer can understand exactly what to build and how to approach it.",
+        "project_id": null,
+        "assignee_id": user_id_or_null,
+        "priority": "medium",
+        "status": "todo",
+        "reasoning": "DETAILED AI reasoning and judgment (5-7 sentences) that includes: (1) WHY this task is important for the overall project and how it contributes to project completion, (2) TASK BREAKDOWN - logical decomposition of the task into manageable components, (3) EFFICIENCY ANALYSIS - reasoning about the most efficient approach considering dependencies, resources, and project timeline, (4) TECHNICAL DECISIONS - explanation of technology choices and why they're optimal for this specific task, (5) RISK ASSESSMENT - potential challenges and how to mitigate them, (6) BEST PRACTICES - industry standards and patterns to follow, (7) COMPLETION STRATEGY - recommended order and approach to ensure this task is completed most efficiently."
+    }}
+]
 
-Note: I can now update existing tasks including their priorities, statuses, and other fields."
+CRITICAL RULES:
+- Return ONLY the JSON array, no explanations
+- NEVER include update_task actions - this is a NEW project creation
+- Create 10-20 tasks covering ALL features/modules/services mentioned
+- Break down each major component into separate tasks
+- For each task's "task_description" field, provide COMPREHENSIVE description (4-6 sentences) covering:
+  * WHAT the task is - clear explanation
+  * HOW to do it - step-by-step methodology
+  * WHICH TOOLS to use - specific technologies/frameworks
+  * MOST EFFICIENT WAY - best practices and optimizations
+- For each task's "reasoning" field, provide DETAILED strategic reasoning (5-7 sentences) covering:
+  * WHY it's important and how it contributes to project completion
+  * Task breakdown and component analysis
+  * Efficiency analysis with dependencies and timeline consideration
+  * Technical decisions and rationale
+  * Risk assessment and mitigation strategies
+  * Best practices and industry standards
+  * Completion strategy for maximum efficiency
+- Generate tasks with proper reasoning and judgment to ensure project can be completed most efficiently
+- {assignment_instruction}
+- Set project_id to null for all tasks (they'll be linked automatically)"""
+                    else:
+                        # Truly ambiguous - ask for clarification
+                        prompt = f"""The user's request is unclear or you cannot determine what they want.
 
-Do NOT return JSON. Do NOT create any projects or tasks."""
+{context_str}
+{users_str}
+
+User Request: {question}
+
+I want to help you, but I need clarification on what you'd like me to do:
+
+1. **Do you want to create a NEW project?**
+   - If yes, please say: "create a new project called [name]" or "create me a [name] project"
+   - You can describe the features/modules you want included
+
+2. **Do you want to add tasks to an EXISTING project?**
+   - If yes, please mention the project name, e.g., "add tasks to Project X"
+   - Or specify which project you're working with
+
+3. **Do you want to update existing tasks?**
+   - If yes, please specify which tasks (by title or ID) and what to change
+
+Once you provide these details, I'll be happy to help!
+
+Do NOT return JSON. Do NOT create anything yet."""
         else:
             # Not an action request - should redirect to QA agent, but for now return message
             prompt = f"""The user's request doesn't appear to be an action request.

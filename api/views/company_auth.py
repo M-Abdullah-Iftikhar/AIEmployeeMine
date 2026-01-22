@@ -128,6 +128,9 @@ def register_company_user(request):
         registration_token.used_at = timezone.now()
         registration_token.save()
         
+        # Generate or get authentication token for the newly registered user
+        auth_token, created = CompanyUserToken.objects.get_or_create(company_user=company_user)
+        
         return Response({
             'status': 'success',
             'message': 'Company account registered successfully',
@@ -139,7 +142,8 @@ def register_company_user(request):
                     'role': company_user.role,
                     'companyId': company.id,
                     'companyName': company.name
-                }
+                },
+                'token': auth_token.key  # Return authentication token for auto-login
             }
         }, status=status.HTTP_201_CREATED)
     

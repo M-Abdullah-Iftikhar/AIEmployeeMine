@@ -101,7 +101,7 @@ const CompanyRegisterPage = () => {
       });
 
       if (response.status === 'success') {
-        // Store company user data (authentication is done via headers)
+        // Store company user data and authentication token
         if (response.data.user) {
           localStorage.setItem('company_user', JSON.stringify(response.data.user));
         } else {
@@ -114,6 +114,11 @@ const CompanyRegisterPage = () => {
             fullName: response.data.fullName || '',
             role: response.data.role || 'admin',
           }));
+        }
+        
+        // Store authentication token for API calls
+        if (response.data.token) {
+          localStorage.setItem('company_auth_token', response.data.token);
         }
         
         toast({
