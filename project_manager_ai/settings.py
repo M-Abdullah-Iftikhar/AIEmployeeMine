@@ -322,65 +322,21 @@ WSGI_APPLICATION = 'project_manager_ai.wsgi.application'
 
 
 # --------------------
-# Database Configuration
+# Database (SQL Server Express)
 # --------------------
-# Set USE_SQL_SERVER=True in .env to use SQL Server, otherwise uses SQLite
-USE_SQL_SERVER = os.getenv('USE_SQL_SERVER', 'False').lower() == 'true'
 
-if USE_SQL_SERVER:
-    # SQL Server Configuration
-    USE_WINDOWS_AUTH = os.getenv('USE_WINDOWS_AUTH', 'True').lower() == 'true'
-    
-    # SQL Server Express default instance is usually 'localhost\SQLEXPRESS'
-    # For default instance, use 'localhost' or 'localhost\MSSQLSERVER'
-    # For named instance, use 'localhost\INSTANCENAME'
-    DB_HOST = os.getenv('DB_HOST', 'localhost\\SQLEXPRESS')  # Default to Express instance
-    DB_NAME = os.getenv('DB_NAME', 'project_manager_db')
-    
-    db_config = {
+
+DATABASES = {
+    'default': {
         'ENGINE': 'mssql',
-
-        'NAME': DB_NAME,
-        'HOST': DB_HOST,
+        'NAME': os.getenv('DB_NAME', 'project_manager_db'),
+        'HOST': r'localhost',
         'OPTIONS': {
             'driver': 'ODBC Driver 17 for SQL Server',
+            'trusted_connection': 'yes',
         },
-    }
-    
-    if USE_WINDOWS_AUTH:
-        # Windows Authentication (Trusted Connection)
-        db_config['OPTIONS']['trusted_connection'] = 'yes'
-    else:
-        # SQL Server Authentication (username/password)
-        db_config['USER'] = os.getenv('DB_USER', '')
-        db_config['PASSWORD'] = os.getenv('DB_PASSWORD', '')
-        db_config['OPTIONS']['extra_params'] = 'TrustServerCertificate=yes'
-    
-    DATABASES = {
-        'default': db_config
-    }
-    
-    print("\n" + "="*60)
-    print("DATABASE CONFIGURATION:")
-    print(f"  Engine: SQL Server")
-    print(f"  Host: {DB_HOST}")
-    print(f"  Database: {DB_NAME}")
-    print(f"  Authentication: {'Windows (Trusted)' if USE_WINDOWS_AUTH else 'SQL Server'}")
-    print("="*60 + "\n")
-else:
-    # Default SQLite database (for development - no setup required)
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
-    
-    print("\n" + "="*60)
-    print("DATABASE CONFIGURATION:")
-    print(f"  Engine: SQLite")
-    print(f"  Database: {BASE_DIR / 'db.sqlite3'}")
-    print("="*60 + "\n")
+
+    }}
 
 
 
