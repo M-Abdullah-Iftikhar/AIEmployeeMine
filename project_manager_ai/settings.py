@@ -337,13 +337,20 @@ if USE_SQL_SERVER:
     DB_HOST = os.getenv('DB_HOST', 'localhost\\SQLEXPRESS')  # Default to Express instance
     DB_NAME = os.getenv('DB_NAME', 'project_manager_db')
     
+    # Import and patch the mssql backend BEFORE creating db config
+    # This prevents REGEXP_LIKE errors during model introspection
+    try:
+        import project_manager_ai.db_backends  # This patches the mssql backend
+    except ImportError:
+        pass  # If patching fails, continue with regular backend
+    
     db_config = {
-        'ENGINE': 'mssql',
-
+        'ENGINE': 'mssql',  # Use regular mssql backend (now patched by db_backends)
         'NAME': DB_NAME,
         'HOST': DB_HOST,
         'OPTIONS': {
             'driver': 'ODBC Driver 17 for SQL Server',
+            'disable_email_check': True,  # Disable database-level email validation (uses REGEXP_LIKE which SQL Server doesn't support)
         },
     }
     
@@ -628,8 +635,8 @@ print(f"  Result Backend: {CELERY_RESULT_BACKEND}")
 print(f"  Timezone: {CELERY_TIMEZONE}")
 print(f"  Using Redis: {USE_REDIS}")
 if not USE_REDIS:
-    print("  ⚠️  Using SQLite broker (slower, for development only)")
-    print("  💡 For production, install Redis and set USE_REDIS=True in .env")
+    print("  WARNING: Using SQLite broker (slower, for development only)")
+    print("  TIP: For production, install Redis and set USE_REDIS=True in .env")
 print(f"  Scheduled Tasks: {len(CELERY_BEAT_SCHEDULE)}")
 print("  - Sequence emails: Every 5 minutes")
 print("  - Inbox sync: Every 5 minutes")
