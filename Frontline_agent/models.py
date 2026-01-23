@@ -45,6 +45,7 @@ class Ticket(models.Model):
     resolved_at = models.DateTimeField(null=True, blank=True)
     
     class Meta:
+        app_label = 'Frontline_agent'
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['status', 'priority']),
@@ -77,6 +78,7 @@ class KnowledgeBase(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
+        app_label = 'Frontline_agent'
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['category']),
@@ -113,6 +115,7 @@ class Notification(models.Model):
     read_at = models.DateTimeField(null=True, blank=True)
     
     class Meta:
+        app_label = 'Frontline_agent'
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['user', 'is_read']),
@@ -144,6 +147,7 @@ class FrontlineWorkflowExecution(models.Model):
     error_message = models.TextField(blank=True, null=True)
     
     class Meta:
+        app_label = 'Frontline_agent'
         ordering = ['-started_at']
         indexes = [
             models.Index(fields=['status', 'started_at']),
@@ -178,6 +182,7 @@ class FrontlineMeeting(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
+        app_label = 'Frontline_agent'
         ordering = ['-scheduled_at']
         indexes = [
             models.Index(fields=['status', 'scheduled_at']),
@@ -214,6 +219,7 @@ class Document(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
+        app_label = 'Frontline_agent'
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['document_type', 'processed']),
@@ -234,6 +240,7 @@ class FrontlineAnalytics(models.Model):
     calculated_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
+        app_label = 'Frontline_agent'
         ordering = ['-calculated_at']
         indexes = [
             models.Index(fields=['metric_name', 'calculated_at']),

@@ -639,41 +639,105 @@
                 <span style="color: #6b7280; font-size: 0.875rem;">(ID: {{ seq_data.sequence.id }})</span>
                 {% endif %} -->
             </h3>
-            <div>
-                {% for upcoming in seq_data.emails %}
-                <div class="upcoming-item" style="margin-bottom: 1rem;">
-                    <div style="display: flex; justify-content: space-between; align-items: start;">
-                        <div style="flex: 1;">
-                            <div style="font-weight: 600; color: #1f2937; margin-bottom: 0.5rem;">
-                                {{ upcoming.lead.email }}
+            
+            {# Display Sequence Emails First #}
+            {% if seq_data.sequence_emails %}
+            <div style="margin-bottom: 1.5rem;">
+                <h4 style="margin: 0 0 0.75rem 0; color: #1f2937; font-size: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                    <span style="background: #fce7f3; color: #9f1239; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.875rem; font-weight: 600;">
+                        🔄 Sequence Emails
+                    </span>
+                </h4>
+                <div>
+                    {% for upcoming in seq_data.sequence_emails %}
+                    <div class="upcoming-item" style="margin-bottom: 1rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: start;">
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; color: #1f2937; margin-bottom: 0.5rem;">
+                                    {{ upcoming.lead.email }}
+                                </div>
+                                <div style="color: #6b7280; font-size: 0.875rem; margin-top: 0.25rem;">
+                                    Next Step: <strong>Step {{ upcoming.next_step.step_order }}</strong> - {{ upcoming.next_step.template.name }}
+                                </div>
                             </div>
-                            <div style="color: #6b7280; font-size: 0.875rem; margin-top: 0.25rem;">
-                                Next Step: <strong>Step {{ upcoming.next_step.step_order }}</strong> - {{ upcoming.next_step.template.name }}
-                            </div>
-                        </div>
-                        <div style="text-align: right;">
-                            <div style="font-weight: 600; color: #3b82f6; font-size: 1.1rem;">
-                                <span class="upcoming-time" data-utc-timestamp="{{ upcoming.next_send_time|date:"U" }}">
-                                    {{ upcoming.next_send_time|date:"M d, H:i" }}
-                                </span>
-                            </div>
-                            <div style="color: #6b7280; font-size: 0.75rem; margin-top: 0.25rem;">
-                                <span class="time-remaining" data-send-timestamp="{{ upcoming.next_send_time|date:"U" }}">
-                                    Calculating...
-                                </span>
-                            </div>
-                            <div style="color: #9ca3af; font-size: 0.7rem; margin-top: 0.25rem;">
-                                Delay: 
-                                {% if upcoming.delay_days > 0 %}{{ upcoming.delay_days }} day{{ upcoming.delay_days|pluralize }}{% endif %}
-                                {% if upcoming.delay_hours > 0 %}{% if upcoming.delay_days > 0 %}, {% endif %}{{ upcoming.delay_hours }} hour{{ upcoming.delay_hours|pluralize }}{% endif %}
-                                {% if upcoming.delay_minutes > 0 %}{% if upcoming.delay_days > 0 or upcoming.delay_hours > 0 %}, {% endif %}{{ upcoming.delay_minutes }} minute{{ upcoming.delay_minutes|pluralize }}{% endif %}
-                                {% if upcoming.delay_days == 0 and upcoming.delay_hours == 0 and upcoming.delay_minutes == 0 %}Immediate{% endif %}
+                            <div style="text-align: right;">
+                                <div style="font-weight: 600; color: #3b82f6; font-size: 1.1rem;">
+                                    <span class="upcoming-time" data-utc-timestamp="{{ upcoming.next_send_time|date:"U" }}">
+                                        {{ upcoming.next_send_time|date:"M d, H:i" }}
+                                    </span>
+                                </div>
+                                <div style="color: #6b7280; font-size: 0.75rem; margin-top: 0.25rem;">
+                                    <span class="time-remaining" data-send-timestamp="{{ upcoming.next_send_time|date:"U" }}">
+                                        Calculating...
+                                    </span>
+                                </div>
+                                <div style="color: #9ca3af; font-size: 0.7rem; margin-top: 0.25rem;">
+                                    Delay: 
+                                    {% if upcoming.delay_days > 0 %}{{ upcoming.delay_days }} day{{ upcoming.delay_days|pluralize }}{% endif %}
+                                    {% if upcoming.delay_hours > 0 %}{% if upcoming.delay_days > 0 %}, {% endif %}{{ upcoming.delay_hours }} hour{{ upcoming.delay_hours|pluralize }}{% endif %}
+                                    {% if upcoming.delay_minutes > 0 %}{% if upcoming.delay_days > 0 or upcoming.delay_hours > 0 %}, {% endif %}{{ upcoming.delay_minutes }} minute{{ upcoming.delay_minutes|pluralize }}{% endif %}
+                                    {% if upcoming.delay_days == 0 and upcoming.delay_hours == 0 and upcoming.delay_minutes == 0 %}Immediate{% endif %}
+                                </div>
                             </div>
                         </div>
                     </div>
+                    {% endfor %}
                 </div>
-                {% endfor %}
             </div>
+            {% endif %}
+            
+            {# Display Sub-Sequence Emails Second #}
+            {% if seq_data.sub_sequence_emails %}
+            <div style="margin-bottom: 1.5rem; {% if seq_data.sequence_emails %}margin-top: 1.5rem; padding-top: 1.5rem; border-top: 2px solid #e5e7eb;{% endif %}">
+                <h4 style="margin: 0 0 0.75rem 0; color: #1f2937; font-size: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                    <span style="background: #ede9fe; color: #5b21b6; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.875rem; font-weight: 600;">
+                        🔀 Sub-Sequence Emails
+                    </span>
+                </h4>
+                <div>
+                    {% for upcoming in seq_data.sub_sequence_emails %}
+                    <div class="upcoming-item" style="margin-bottom: 1rem; border-left-color: #8b5cf6;">
+                        <div style="display: flex; justify-content: space-between; align-items: start;">
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; color: #1f2937; margin-bottom: 0.5rem;">
+                                    {{ upcoming.lead.email }}
+                                </div>
+                                <div style="color: #6b7280; font-size: 0.875rem; margin-top: 0.25rem;">
+                                    {% if upcoming.sub_sequence %}
+                                        <div style="margin-bottom: 0.25rem;">
+                                            <span style="background: #ede9fe; color: #5b21b6; padding: 0.15rem 0.4rem; border-radius: 0.25rem; font-size: 0.75rem; font-weight: 500;">
+                                                Sub-Seq: {{ upcoming.sub_sequence.name }}
+                                            </span>
+                                        </div>
+                                    {% endif %}
+                                    Next Step: <strong>Step {{ upcoming.next_step.step_order }}</strong> - {{ upcoming.next_step.template.name }}
+                                </div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-weight: 600; color: #8b5cf6; font-size: 1.1rem;">
+                                    <span class="upcoming-time" data-utc-timestamp="{{ upcoming.next_send_time|date:"U" }}">
+                                        {{ upcoming.next_send_time|date:"M d, H:i" }}
+                                    </span>
+                                </div>
+                                <div style="color: #6b7280; font-size: 0.75rem; margin-top: 0.25rem;">
+                                    <span class="time-remaining" data-send-timestamp="{{ upcoming.next_send_time|date:"U" }}">
+                                        Calculating...
+                                    </span>
+                                </div>
+                                <div style="color: #9ca3af; font-size: 0.7rem; margin-top: 0.25rem;">
+                                    Delay: 
+                                    {% if upcoming.delay_days > 0 %}{{ upcoming.delay_days }} day{{ upcoming.delay_days|pluralize }}{% endif %}
+                                    {% if upcoming.delay_hours > 0 %}{% if upcoming.delay_days > 0 %}, {% endif %}{{ upcoming.delay_hours }} hour{{ upcoming.delay_hours|pluralize }}{% endif %}
+                                    {% if upcoming.delay_minutes > 0 %}{% if upcoming.delay_days > 0 or upcoming.delay_hours > 0 %}, {% endif %}{{ upcoming.delay_minutes }} minute{{ upcoming.delay_minutes|pluralize }}{% endif %}
+                                    {% if upcoming.delay_days == 0 and upcoming.delay_hours == 0 and upcoming.delay_minutes == 0 %}Immediate{% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
         </div>
         {% endfor %}
     </div>
@@ -893,7 +957,7 @@
                                     Reply to: {{ reply.sub_sequence.name }} (Sub-Sequence)
                                 </div>
                             {% endif %}
-                            {% if reply.analysis %}
+                            {% if reply.analysis and reply.analysis|length > 0 and not reply.sub_sequence %}
                                 <div style="color: #6b7280; font-size: 0.875rem; margin-top: 0.5rem; padding: 0.5rem; background: #f9fafb; border-radius: 0.375rem; border-left: 3px solid #10b981;">
                                     <strong>AI Analysis:</strong> {{ reply.analysis }}
                                 </div>
@@ -947,7 +1011,7 @@
                             Subject: {{ reply.reply_subject }}
                         </div>
                     {% endif %}
-                    {% if reply.analysis %}
+                    {% if reply.analysis and reply.analysis|length > 0 and not reply.sub_sequence %}
                         <div style="color: #6b7280; font-size: 0.875rem; margin-top: 0.5rem; padding: 0.5rem; background: #f9fafb; border-radius: 0.375rem; border-left: 3px solid #10b981;">
                             <strong>AI Analysis:</strong> {{ reply.analysis }}
                         </div>
@@ -987,7 +1051,7 @@
                             Subject: {{ contact.reply_subject }}
                         </div>
                     {% endif %}
-                    {% if contact.reply_analysis %}
+                    {% if contact.reply_analysis and contact.reply_analysis|length > 0 and not contact.sub_sequence %}
                         <div style="color: #6b7280; font-size: 0.875rem; margin-top: 0.5rem; padding: 0.5rem; background: #f9fafb; border-radius: 0.375rem; border-left: 3px solid #10b981;">
                             <strong>AI Analysis:</strong> {{ contact.reply_analysis }}
                         </div>
