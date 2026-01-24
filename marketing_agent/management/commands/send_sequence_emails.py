@@ -188,15 +188,37 @@ class Command(BaseCommand):
                     
                     if sub_sequences.exists():
                         sub_sequence = sub_sequences.first()
+                        # CRITICAL: Preserve replied_at - DO NOT reset it!
+                        # replied_at should already be set when mark_replied was called
+                        # This is the reference time for delay calculation
+                        original_replied_at = contact.replied_at
+                        
                         contact.sub_sequence = sub_sequence
                         contact.sub_sequence_step = 0
                         contact.sub_sequence_last_sent_at = None
                         contact.sub_sequence_completed = False
+                        
+                        # CRITICAL: Preserve replied_at - this is when they actually replied
+                        # DO NOT overwrite it with current time - that would break delay calculation!
+                        if not contact.replied_at:
+                            # Only set if truly missing (shouldn't happen if mark_replied was called)
+                            contact.replied_at = timezone.now()
+                            self.stdout.write(
+                                self.style.ERROR(
+                                    f'  [ERROR] replied_at was not set for {contact.lead.email}, setting to now. Delay may be incorrect!'
+                                )
+                            )
+                        else:
+                            # Preserve the original replied_at - this is critical for delay calculation
+                            self.stdout.write(
+                                f'  [INFO] Preserving replied_at={contact.replied_at} for delay calculation'
+                            )
+                        
                         contact.save()
                         self.stdout.write(
                             self.style.SUCCESS(
                                 f'  [AUTO-ASSIGNED] Sub-sequence "{sub_sequence.name}" to {contact.lead.email} '
-                                f'(interest: {contact.reply_interest_level})'
+                                f'(interest: {contact.reply_interest_level}, replied_at: {contact.replied_at})'
                             )
                         )
                     else:
@@ -258,6 +280,9 @@ class Command(BaseCommand):
                 self.stdout.write(f'\n  Processing {sub_contact_count} sub-sequence contact(s)...')
                 for contact in sub_sequence_contacts:
                     total_checked += 1
+                    # CRITICAL: Refresh contact from DB to ensure we have latest replied_at
+                    # This prevents issues where replied_at might have been set after query
+                    contact.refresh_from_db()
                     result = self._process_sub_sequence_contact(contact, campaign, dry_run)
                     if result == 'sent':
                         total_sent += 1
@@ -458,14 +483,104 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(f'     Step {next_step_number} not found in sub-sequence'))
             return 'skipped'
         
-        # Calculate if it's time to send (based on sub_sequence_last_sent_at)
+        # CRITICAL: Verify delay is configured
+        delay_total = (next_step.delay_days * 86400) + (next_step.delay_hours * 3600) + (next_step.delay_minutes * 60)
+        if delay_total == 0 and next_step_number == 1:
+            self.stdout.write(
+                self.style.WARNING(
+                    f'   [WARNING] Step {next_step_number} has NO DELAY configured (all delays are 0). '
+                    f'This will send immediately. Consider setting a delay.'
+                )
+            )
+        
+        # Calculate if it's time to send (based on sub_sequence_last_sent_at or replied_at)
         should_send = False
         send_reason = ''
         
         if contact.sub_sequence_step == 0:
-            # First step in sub-sequence - send immediately after reply
-            should_send = True
-            send_reason = 'First step in sub-sequence (reply received)'
+            # First step in sub-sequence - use replied_at as reference time and respect delay
+            # This ensures sub-sequence emails are sent according to their delay time, not immediately
+            if not contact.replied_at:
+                # If replied_at is not set, this is a critical error
+                self.stdout.write(
+                    self.style.ERROR(
+                        f'   [CRITICAL ERROR] replied_at is not set for {lead.email} in sub-sequence. '
+                        f'Cannot calculate delay correctly. Setting to now, but delay will be wrong!'
+                    )
+                )
+                contact.replied_at = timezone.now()
+                contact.save()
+            
+            # CRITICAL: Use replied_at as reference - this is when they actually replied
+            reference_time = contact.replied_at
+            
+            delay = timedelta(
+                days=next_step.delay_days,
+                hours=next_step.delay_hours,
+                minutes=next_step.delay_minutes
+            )
+            
+            # Calculate send_time from reference_time (when they replied) + delay
+            send_time = reference_time + delay
+            now = timezone.now()
+            
+            # Calculate time difference
+            time_diff_seconds = (send_time - now).total_seconds()
+            
+            # DEBUG: Log delay calculation details
+            self.stdout.write(
+                f'   [DELAY CHECK] First sub-sequence step for {lead.email}:'
+            )
+            self.stdout.write(
+                f'      Reference time (replied_at): {reference_time}'
+            )
+            self.stdout.write(
+                f'      Delay configured: {delay} ({delay.total_seconds()} seconds = {delay.total_seconds()/60:.1f} minutes)'
+            )
+            self.stdout.write(
+                f'      Calculated send_time: {send_time}'
+            )
+            self.stdout.write(
+                f'      Current time (now): {now}'
+            )
+            self.stdout.write(
+                f'      Time difference: {time_diff_seconds} seconds ({time_diff_seconds/60:.1f} minutes)'
+            )
+            
+            # CRITICAL: Only send if delay has actually passed
+            # For step 0, if delay is 0 or very small (≤ 1 minute), send immediately
+            if delay.total_seconds() <= 60:  # 1 minute or less
+                should_send = True
+                send_reason = f'First step in sub-sequence (delay: {delay.total_seconds()}s ≤ 60s - sending immediately)'
+                self.stdout.write(
+                    f'   [SENDING] {send_reason}'
+                )
+            elif time_diff_seconds <= 0:
+                # Enough time has passed since reply (send_time is in the past or now)
+                should_send = True
+                send_reason = f'First step delay passed (replied_at: {reference_time}, delay: {delay}, send_time: {send_time}, now: {now})'
+                self.stdout.write(
+                    f'   [SENDING] {send_reason}'
+                )
+            else:
+                # Still waiting for the delay to pass
+                time_remaining = timedelta(seconds=time_diff_seconds)
+                should_send = False
+                self.stdout.write(
+                    self.style.WARNING(
+                        f'   [WAITING] First sub-sequence step NOT ready yet:'
+                    )
+                )
+                self.stdout.write(
+                    f'      Time remaining: {time_remaining} ({time_diff_seconds/60:.1f} minutes)'
+                )
+                self.stdout.write(
+                    f'      Will send at: {send_time}'
+                )
+                self.stdout.write(
+                    f'      Current time: {now}'
+                )
+                return 'skipped'
         else:
             # Subsequent steps - check delay from last sub-sequence email
             if not contact.sub_sequence_last_sent_at:

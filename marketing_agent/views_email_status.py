@@ -1054,9 +1054,16 @@ def email_sending_status(request, campaign_id):
             upcoming_by_sequence[seq_key] = {
                 'sequence': sequence,
                 'sequence_name': sequence.name if sequence else 'No Sequence',
-                'emails': []
+                'emails': [],
+                'sequence_emails': [],  # Regular sequence emails
+                'sub_sequence_emails': []  # Sub-sequence emails
             }
         upcoming_by_sequence[seq_key]['emails'].append(email_data)
+        # Also add to the appropriate list based on is_sub_sequence flag
+        if email_data.get('is_sub_sequence', False):
+            upcoming_by_sequence[seq_key]['sub_sequence_emails'].append(email_data)
+        else:
+            upcoming_by_sequence[seq_key]['sequence_emails'].append(email_data)
     
     context = {
         'campaign': campaign,

@@ -45,26 +45,8 @@ def process_reply_directly(campaign, lead, reply_subject, reply_content, reply_d
         if not reply_date:
             reply_date = timezone.now()
         
-        # Analyze reply with AI if content is provided
-        interest_level = 'not_analyzed'
-        analysis = ''
-        if reply_content or reply_subject:
-            try:
-                analyzer = ReplyAnalyzer()
-                analysis_result = analyzer.analyze_reply(
-                    reply_subject=reply_subject,
-                    reply_content=reply_content,
-                    campaign_name=campaign.name
-                )
-                interest_level = analysis_result.get('interest_level', 'neutral')
-                analysis = analysis_result.get('analysis', '')
-                logger.info(f"AI analyzed reply for {lead.email}: {interest_level}")
-            except Exception as e:
-                logger.error(f"Error analyzing reply with AI: {str(e)}")
-                interest_level = 'not_analyzed'
-                analysis = f'AI analysis failed: {str(e)}'
-        
-        # Determine which sequence this reply is for
+        # Determine which sequence this reply is for FIRST
+        # This is critical: we need to know if it's a sub-sequence reply BEFORE analyzing
         is_sub_sequence_reply = False
         reply_sequence = None
         reply_sub_sequence = None
@@ -117,39 +99,76 @@ def process_reply_directly(campaign, lead, reply_subject, reply_content, reply_d
                         else:
                             triggering_email = most_recent_email
             
+            # SIMPLIFIED: Check if triggering email is from a sub-sequence
             if triggering_email and triggering_email.email_template:
                 sequence_steps = triggering_email.email_template.sequence_steps.all()
                 if sequence_steps.exists():
                     seq_step = sequence_steps.first()
                     reply_sequence = seq_step.sequence
+                    # CRITICAL: Check if this sequence is a sub-sequence
                     if reply_sequence and reply_sequence.is_sub_sequence:
                         is_sub_sequence_reply = True
                         reply_sub_sequence = reply_sequence
-                        reply_sequence = reply_sequence.parent_sequence
+                        reply_sequence = reply_sequence.parent_sequence  # Get parent for main sequence
+                        logger.info(f"Detected sub-sequence reply: {lead.email} replied to sub-sequence '{reply_sub_sequence.name}'")
+                    else:
+                        # Main sequence reply
+                        logger.info(f"Detected main sequence reply: {lead.email} replied to main sequence '{reply_sequence.name if reply_sequence else 'None'}'")
                 else:
+                    # No sequence steps found - fallback to contact's sequence
                     reply_sequence = contact.sequence
-                    if contact.sub_sequence:
-                        if triggering_email.email_template.sequence_steps.exists():
-                            seq_step = triggering_email.email_template.sequence_steps.first()
-                            if seq_step and seq_step.sequence and seq_step.sequence.is_sub_sequence:
-                                is_sub_sequence_reply = True
-                                reply_sub_sequence = contact.sub_sequence
+                    logger.warning(f"No sequence steps found for triggering email template, using contact sequence: {contact.sequence.name if contact.sequence else 'None'}")
             else:
+                # No triggering email found - check most recent email
                 reply_sequence = contact.sequence
-                if contact.sub_sequence and all_sent_emails.exists():
+                if all_sent_emails.exists():
                     most_recent = all_sent_emails.first()
-                    if most_recent and most_recent.email_template and most_recent.email_template.sequence_steps.exists():
-                        seq_step = most_recent.email_template.sequence_steps.first()
-                        if seq_step and seq_step.sequence and seq_step.sequence.is_sub_sequence:
-                            if most_recent.sent_at and (timezone.now() - most_recent.sent_at) < timedelta(hours=48):
+                    if most_recent and most_recent.email_template:
+                        sequence_steps = most_recent.email_template.sequence_steps.all()
+                        if sequence_steps.exists():
+                            seq_step = sequence_steps.first()
+                            if seq_step and seq_step.sequence and seq_step.sequence.is_sub_sequence:
+                                # Most recent email is from sub-sequence - this is a sub-sequence reply
                                 is_sub_sequence_reply = True
-                                reply_sub_sequence = contact.sub_sequence
+                                reply_sub_sequence = seq_step.sequence
+                                reply_sequence = seq_step.sequence.parent_sequence
+                                logger.info(f"Detected sub-sequence reply (fallback): {lead.email} - most recent email is from sub-sequence '{reply_sub_sequence.name}'")
         except Exception as e:
             logger.warning(f'Could not determine reply sequence: {str(e)}')
             reply_sequence = contact.sequence
+            # If contact has sub_sequence, assume it's a sub-sequence reply (safer default)
             if contact.sub_sequence:
                 is_sub_sequence_reply = True
                 reply_sub_sequence = contact.sub_sequence
+                logger.warning(f'Using fallback: marking as sub-sequence reply for {lead.email}')
+        
+        # IMPORTANT: Only analyze replies to MAIN sequence emails
+        # Sub-sequence replies should NOT be analyzed (no further sub-sequences exist)
+        interest_level = 'not_analyzed'
+        analysis = ''
+        
+        if not is_sub_sequence_reply:
+            # This is a reply to MAIN sequence email - analyze it
+            if reply_content or reply_subject:
+                try:
+                    analyzer = ReplyAnalyzer()
+                    analysis_result = analyzer.analyze_reply(
+                        reply_subject=reply_subject,
+                        reply_content=reply_content,
+                        campaign_name=campaign.name
+                    )
+                    interest_level = analysis_result.get('interest_level', 'neutral')
+                    analysis = analysis_result.get('analysis', '')
+                    logger.info(f"AI analyzed reply for {lead.email}: {interest_level}")
+                except Exception as e:
+                    logger.error(f"Error analyzing reply with AI: {str(e)}")
+                    interest_level = 'not_analyzed'
+                    analysis = f'AI analysis failed: {str(e)}'
+        else:
+            # This is a reply to SUB-SEQUENCE email - just record it, don't analyze
+            logger.info(f"Reply to sub-sequence email from {lead.email} - skipping AI analysis (no further sub-sequences)")
+            interest_level = 'not_analyzed'
+            analysis = 'Reply to sub-sequence email (not analyzed - no further sub-sequences)'
         
         # Create Reply record
         try:
@@ -166,11 +185,12 @@ def process_reply_directly(campaign, lead, reply_subject, reply_content, reply_d
                 triggering_email=triggering_email,
                 replied_at=reply_date
             )
-            logger.info(f"Created Reply record #{reply_record.id} for {lead.email}")
+            logger.info(f"Created Reply record #{reply_record.id} for {lead.email} - {'Sub-sequence reply (not analyzed)' if is_sub_sequence_reply else 'Main sequence reply (analyzed)'}")
         except Exception as e:
             logger.warning(f'Could not create Reply record: {str(e)}')
         
-        # Find sub-sequence for main sequence replies
+        # Find sub-sequence for main sequence replies ONLY
+        # Sub-sequence replies should NOT trigger new sub-sequences
         sub_sequence = None
         if not is_sub_sequence_reply and contact.sequence:
             target_interest = interest_level if interest_level and interest_level != 'not_analyzed' else 'neutral'
@@ -212,6 +232,7 @@ def process_reply_directly(campaign, lead, reply_subject, reply_content, reply_d
         contact.mark_replied(
             reply_subject=reply_subject,
             reply_content=reply_content,
+            reply_at=reply_date,  # Pass the reply date so delay calculations use correct time
             interest_level=interest_level,
             analysis=analysis,
             sub_sequence=sub_sequence if not is_sub_sequence_reply else None
