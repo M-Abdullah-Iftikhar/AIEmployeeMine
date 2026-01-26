@@ -334,8 +334,8 @@ WSGI_APPLICATION = 'project_manager_ai.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'mssql',
-        'NAME': os.getenv('DB_NAME', 'project_manager_db'),
-        'HOST': r'localhost\SQLEXPRESS',
+        'NAME': os.getenv('DB_NAME', 'payPerProject'),
+        'HOST': r'103.4.95.77',
         'OPTIONS': {
             'driver': 'ODBC Driver 17 for SQL Server',
             'trusted_connection': 'yes',
