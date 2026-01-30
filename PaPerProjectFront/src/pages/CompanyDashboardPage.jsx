@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/components/ui/use-toast';
 import { companyJobsService } from '@/services';
 import { companyApi } from '@/services/companyAuthService';
@@ -22,7 +23,7 @@ import {
   Building2, Plus, Briefcase, Users, Eye, 
   Loader2, Search, Calendar, MapPin, Clock, Download, BrainCircuit, FolderKanban,
   ChevronDown, ChevronRight, ListTodo, UserCheck, Megaphone, UserPlus, Edit, Trash2, Mail,
-  CheckCircle2, Circle, PlayCircle, AlertCircle, FileCheck, TrendingUp, User
+  CheckCircle2, Circle, PlayCircle, AlertCircle, FileCheck, TrendingUp, User, ChevronLeft
 } from 'lucide-react';
 
 const CompanyDashboardPage = () => {
@@ -47,9 +48,9 @@ const CompanyDashboardPage = () => {
   // User management state
   const [users, setUsers] = useState([]);
   const [usersLoading, setUsersLoading] = useState(false);
+  const [usersPagination, setUsersPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 });
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
-  const [userSearchQuery, setUserSearchQuery] = useState('');
   const [userForm, setUserForm] = useState({
     email: '',
     password: '',
@@ -64,9 +65,12 @@ const CompanyDashboardPage = () => {
   // All users tasks state
   const [allUsersTasks, setAllUsersTasks] = useState([]);
   const [allUsersTasksLoading, setAllUsersTasksLoading] = useState(false);
+  const [tasksPagination, setTasksPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 });
   const [taskStatusFilter, setTaskStatusFilter] = useState('all');
   const [taskUserFilter, setTaskUserFilter] = useState('all');
   const [taskProjectFilter, setTaskProjectFilter] = useState('all');
+  const [selectedTaskDescription, setSelectedTaskDescription] = useState(null);
+  const [showDescriptionModal, setShowDescriptionModal] = useState(false);
   
   // Project and Task editing state
   const [editingProject, setEditingProject] = useState(null);
@@ -474,12 +478,15 @@ const CompanyDashboardPage = () => {
       }
       fetchAllUsersTasks();
     }
-  }, [activeTab, companyUser, taskStatusFilter, taskUserFilter, taskProjectFilter]);
+  }, [activeTab, companyUser, taskStatusFilter, taskUserFilter, taskProjectFilter, usersPagination.page, usersPagination.limit, tasksPagination.page, tasksPagination.limit]);
   
   const fetchAllUsersTasks = async () => {
     try {
       setAllUsersTasksLoading(true);
-      const params = {};
+      const params = {
+        page: tasksPagination.page,
+        limit: tasksPagination.limit,
+      };
       if (taskStatusFilter !== 'all') {
         params.status = taskStatusFilter;
       }
@@ -497,6 +504,9 @@ const CompanyDashboardPage = () => {
       const response = await companyApi.get(endpoint);
       if (response.status === 'success') {
         setAllUsersTasks(response.data || []);
+        if (response.pagination) {
+          setTasksPagination(response.pagination);
+        }
       } else {
         throw new Error(response.message || 'Failed to load tasks');
       }
@@ -516,9 +526,15 @@ const CompanyDashboardPage = () => {
   const fetchUsers = async () => {
     try {
       setUsersLoading(true);
-      const response = await companyUserManagementService.listUsers({ page: 1, limit: 50 });
+      const response = await companyUserManagementService.listUsers({ 
+        page: usersPagination.page, 
+        limit: usersPagination.limit 
+      });
       if (response.status === 'success') {
         setUsers(response.data || []);
+        if (response.pagination) {
+          setUsersPagination(response.pagination);
+        }
       } else {
         throw new Error(response.message || 'Failed to load users');
       }
@@ -1164,21 +1180,6 @@ const CompanyDashboardPage = () => {
             </TabsContent>
             
             <TabsContent value="users" className="space-y-4">
-              {/* Search Bar */}
-              {users.length > 0 && (
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search users by name, email, or role..."
-                      value={userSearchQuery}
-                      onChange={(e) => setUserSearchQuery(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-              )}
-              
               {usersLoading ? (
                 <div className="flex justify-center py-12">
                   <Loader2 className="h-8 w-8 animate-spin" />
@@ -1204,122 +1205,130 @@ const CompanyDashboardPage = () => {
                     </Button>
                   </CardContent>
                 </Card>
-              ) : (() => {
-                // Filter users based on search query
-                const filteredUsers = users.filter(user => {
-                  if (!userSearchQuery) return true;
-                  const query = userSearchQuery.toLowerCase();
-                  return (
-                    (user.full_name && user.full_name.toLowerCase().includes(query)) ||
-                    (user.username && user.username.toLowerCase().includes(query)) ||
-                    (user.email && user.email.toLowerCase().includes(query)) ||
-                    (user.role && user.role.toLowerCase().includes(query))
-                  );
-                });
-                
-                if (filteredUsers.length === 0) {
-                  return (
-                    <Card>
-                      <CardContent className="py-12 text-center">
-                        <Search className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                        <p className="text-lg font-medium mb-2">No users found</p>
-                        <p className="text-sm text-muted-foreground">
-                          Try adjusting your search query
-                        </p>
-                      </CardContent>
-                    </Card>
-                  );
-                }
-                
-                return (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm text-muted-foreground">
-                        Showing {filteredUsers.length} of {users.length} user{users.length !== 1 ? 's' : ''}
-                      </p>
-                    </div>
-                    <div className="grid gap-4">
-                      {filteredUsers.map((user) => (
-                        <Card key={user.id} className="hover:shadow-md transition-shadow">
-                          <CardHeader>
-                            <div className="flex justify-between items-start">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <CardTitle className="text-lg">{user.full_name || user.username}</CardTitle>
+              ) : (
+                <div className="space-y-4">
+                  <Card>
+                    <CardContent className="p-0">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Email</TableHead>
+                            <TableHead>Role</TableHead>
+                            <TableHead>Location</TableHead>
+                            <TableHead>Phone</TableHead>
+                            <TableHead>Joined</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {users.map((user) => (
+                            <TableRow key={user.id}>
+                              <TableCell className="font-medium">
+                                <div className="flex items-center gap-2">
+                                  {user.full_name || user.username}
                                   {user.is_active === false && (
                                     <Badge variant="secondary" className="text-xs">Inactive</Badge>
                                   )}
                                 </div>
-                                <div className="flex flex-wrap gap-3 mt-2 text-sm text-muted-foreground">
-                                  <span className="flex items-center gap-1">
-                                    <Mail className="h-4 w-4" />
-                                    {user.email}
-                                  </span>
-                                  <Badge variant="outline" className="capitalize">
-                                    {user.role?.replace('_', ' ')}
-                                  </Badge>
-                                  {user.location && (
-                                    <span className="flex items-center gap-1">
-                                      <MapPin className="h-4 w-4" />
-                                      {user.location}
-                                    </span>
-                                  )}
-                                  {user.phone_number && (
-                                    <span className="flex items-center gap-1">
-                                      <Clock className="h-4 w-4" />
-                                      {user.phone_number}
-                                    </span>
-                                  )}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-1">
+                                  <Mail className="h-3 w-3 text-muted-foreground" />
+                                  {user.email}
                                 </div>
-                                {user.created_by_company_user_name && (
-                                  <p className="text-xs text-muted-foreground mt-2">
-                                    Created by: <span className="font-medium">{user.created_by_company_user_name}</span>
-                                  </p>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="capitalize">
+                                  {user.role?.replace('_', ' ')}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                {user.location ? (
+                                  <div className="flex items-center gap-1">
+                                    <MapPin className="h-3 w-3 text-muted-foreground" />
+                                    {user.location}
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground">-</span>
                                 )}
-                                {user.date_joined && (
-                                  <p className="text-xs text-muted-foreground mt-1">
-                                    Joined: {new Date(user.date_joined).toLocaleDateString()}
-                                  </p>
+                              </TableCell>
+                              <TableCell>
+                                {user.phone_number || <span className="text-muted-foreground">-</span>}
+                              </TableCell>
+                              <TableCell>
+                                {user.date_joined ? (
+                                  new Date(user.date_joined).toLocaleDateString()
+                                ) : (
+                                  <span className="text-muted-foreground">-</span>
                                 )}
-                              </div>
-                              <div className="flex gap-2 ml-4">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleEditUser(user)}
-                                  className="flex items-center gap-1"
-                                >
-                                  <Edit className="h-4 w-4" />
-                                  Edit
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleDeleteUser(user.id)}
-                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
-                          </CardHeader>
-                          {user.bio && (
-                            <CardContent>
-                              <p className="text-sm text-muted-foreground line-clamp-2">{user.bio}</p>
-                            </CardContent>
-                          )}
-                        </Card>
-                      ))}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleEditUser(user)}
+                                    className="h-8 w-8 p-0"
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleDeleteUser(user.id)}
+                                    className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                  
+                  {/* Pagination */}
+                  {usersPagination.totalPages > 1 && (
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-muted-foreground">
+                        Showing page {usersPagination.page} of {usersPagination.totalPages} ({usersPagination.total} total users)
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setUsersPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                          disabled={usersPagination.page === 1 || usersLoading}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Previous
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setUsersPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                          disabled={usersPagination.page >= usersPagination.totalPages || usersLoading}
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                );
-              })()}
+                  )}
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="all-tasks" className="space-y-4">
               {/* Filters */}
               <div className="flex items-center gap-4 flex-wrap">
-                <Select value={taskStatusFilter} onValueChange={setTaskStatusFilter}>
+                <Select value={taskStatusFilter} onValueChange={(value) => {
+                  setTaskStatusFilter(value);
+                  setTasksPagination(prev => ({ ...prev, page: 1 }));
+                }}>
                   <SelectTrigger className="w-[180px]">
                     <SelectValue placeholder="Filter by status" />
                   </SelectTrigger>
@@ -1333,7 +1342,10 @@ const CompanyDashboardPage = () => {
                   </SelectContent>
                 </Select>
                 
-                <Select value={taskUserFilter} onValueChange={setTaskUserFilter}>
+                <Select value={taskUserFilter} onValueChange={(value) => {
+                  setTaskUserFilter(value);
+                  setTasksPagination(prev => ({ ...prev, page: 1 }));
+                }}>
                   <SelectTrigger className="w-[180px]">
                     <SelectValue placeholder="Filter by user" />
                   </SelectTrigger>
@@ -1357,7 +1369,10 @@ const CompanyDashboardPage = () => {
                   </SelectContent>
                 </Select>
                 
-                <Select value={taskProjectFilter} onValueChange={setTaskProjectFilter}>
+                <Select value={taskProjectFilter} onValueChange={(value) => {
+                  setTaskProjectFilter(value);
+                  setTasksPagination(prev => ({ ...prev, page: 1 }));
+                }}>
                   <SelectTrigger className="w-[180px]">
                     <SelectValue placeholder="Filter by project" />
                   </SelectTrigger>
@@ -1389,64 +1404,138 @@ const CompanyDashboardPage = () => {
                   </CardContent>
                 </Card>
               ) : (
-                <div className="grid gap-4">
-                  {allUsersTasks.map((task) => (
-                    <Card key={task.id} className="hover:shadow-md transition-shadow">
-                      <CardHeader>
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between gap-2 mb-2">
-                              <CardTitle className="text-lg">{task.title}</CardTitle>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleEditTask(task)}
-                                className="h-8 w-8 p-0"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                            </div>
-                            {task.description && (
-                              <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-                                {task.description}
-                              </p>
-                            )}
-                            <div className="flex flex-wrap gap-2 items-center">
-                              <Badge className={getStatusColor(task.status)}>
-                                {getStatusIcon(task.status)}
-                                <span className="ml-1 capitalize">{task.status.replace('_', ' ')}</span>
-                              </Badge>
-                              <Badge variant="outline" className={getPriorityColor(task.priority)}>
-                                {task.priority} Priority
-                              </Badge>
-                              <span className="text-sm text-muted-foreground flex items-center gap-1">
-                                <FolderKanban className="h-4 w-4" />
-                                {task.project_name}
-                              </span>
-                              {task.assignee_name && (
-                                <span className="text-sm text-muted-foreground flex items-center gap-1">
-                                  <User className="h-4 w-4" />
-                                  {task.assignee_name}
-                                </span>
-                              )}
-                              {task.due_date && (
-                                <span className="text-sm text-muted-foreground flex items-center gap-1">
-                                  <Calendar className="h-4 w-4" />
-                                  {new Date(task.due_date).toLocaleDateString()}
-                                </span>
-                              )}
-                              {task.progress_percentage !== null && (
-                                <span className="text-sm text-muted-foreground flex items-center gap-1">
-                                  <TrendingUp className="h-4 w-4" />
-                                  {task.progress_percentage}% complete
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </CardHeader>
-                    </Card>
-                  ))}
+                <div className="space-y-4">
+                  <Card>
+                    <CardContent className="p-0">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-[250px]">Task</TableHead>
+                            <TableHead>Description</TableHead>
+                            <TableHead>Assignee</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Priority</TableHead>
+                            <TableHead>Due Date</TableHead>
+                            <TableHead>Progress</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {allUsersTasks.map((task) => (
+                            <TableRow key={task.id}>
+                              <TableCell className="w-[250px]">
+                                <div>
+                                  <div className="font-medium">{task.title}</div>
+                                  <div className="text-sm text-muted-foreground mt-1 flex items-center gap-1">
+                                    <FolderKanban className="h-3 w-3" />
+                                    {task.project_name}
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                {task.description ? (
+                                  <div
+                                    className="text-sm text-muted-foreground line-clamp-2 cursor-pointer hover:text-primary hover:underline"
+                                    onClick={() => {
+                                      setSelectedTaskDescription({
+                                        title: task.title,
+                                        description: task.description
+                                      });
+                                      setShowDescriptionModal(true);
+                                    }}
+                                  >
+                                    {task.description}
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground text-sm">No description</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {task.assignee_name ? (
+                                  <div className="flex items-center gap-1">
+                                    <User className="h-3 w-3 text-muted-foreground" />
+                                    {task.assignee_name}
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground">Unassigned</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <Badge className={getStatusColor(task.status)}>
+                                  {getStatusIcon(task.status)}
+                                  <span className="ml-1 capitalize">{task.status.replace('_', ' ')}</span>
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className={getPriorityColor(task.priority)}>
+                                  {task.priority}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                {task.due_date ? (
+                                  <div className="flex items-center gap-1">
+                                    <Calendar className="h-3 w-3 text-muted-foreground" />
+                                    {new Date(task.due_date).toLocaleDateString()}
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground">-</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {task.progress_percentage !== null ? (
+                                  <div className="flex items-center gap-1">
+                                    <TrendingUp className="h-3 w-3 text-muted-foreground" />
+                                    {task.progress_percentage}%
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground">-</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEditTask(task)}
+                                  className="h-8 w-8 p-0"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                  
+                  {/* Pagination */}
+                  {tasksPagination.totalPages > 1 && (
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-muted-foreground">
+                        Showing page {tasksPagination.page} of {tasksPagination.totalPages} ({tasksPagination.total} total tasks)
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setTasksPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                          disabled={tasksPagination.page === 1 || allUsersTasksLoading}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Previous
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setTasksPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                          disabled={tasksPagination.page >= tasksPagination.totalPages || allUsersTasksLoading}
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </TabsContent>
@@ -1829,6 +1918,22 @@ const CompanyDashboardPage = () => {
                 </Button>
               </div>
             </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Task Description Modal */}
+        <Dialog open={showDescriptionModal} onOpenChange={setShowDescriptionModal}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>{selectedTaskDescription?.title || 'Task Description'}</DialogTitle>
+            </DialogHeader>
+            <div className="mt-4">
+              {selectedTaskDescription?.description ? (
+                <p className="text-sm whitespace-pre-wrap">{selectedTaskDescription.description}</p>
+              ) : (
+                <p className="text-sm text-muted-foreground">No description available</p>
+              )}
+            </div>
           </DialogContent>
         </Dialog>
 

@@ -1325,17 +1325,20 @@ Return JSON array:
             }
         }
     
-    def calculate_duration_estimate(self, tasks: List[Dict]) -> Dict:
+    def calculate_duration_estimate(self, tasks: List[Dict], project_id: int = None, team_size: int = None) -> Dict:
         """
-        Calculate project duration estimates with AI-powered analysis.
+        Calculate project duration estimates using AI-powered analysis with team size and parallelization considerations.
+        Uses AI for intelligent estimation while maintaining consistency through deterministic base calculations.
         
         Args:
             tasks (List[Dict]): List of tasks with estimated hours and dependencies
+            project_id (int): Optional project ID to fetch team size
+            team_size (int): Optional team size (number of people working on project)
             
         Returns:
-            Dict: Duration estimates including optimistic, realistic, and pessimistic scenarios with AI insights
+            Dict: Duration estimates with AI reasoning and improvement suggestions
         """
-        self.log_action("Calculating duration estimate", {"tasks_count": len(tasks)})
+        self.log_action("Calculating duration estimate", {"tasks_count": len(tasks), "project_id": project_id})
         
         if not tasks:
             return {
@@ -1343,72 +1346,160 @@ Return JSON array:
                 'error': 'No tasks provided for duration estimation'
             }
         
+        # Get team size if not provided
+        if team_size is None and project_id:
+            try:
+                from core.models import Project, TeamMember
+                project = Project.objects.get(id=project_id)
+                # Count unique assignees from tasks
+                unique_assignees = set()
+                for task in tasks:
+                    if task.get('assignee_id'):
+                        unique_assignees.add(task.get('assignee_id'))
+                # Also count team members
+                team_members_count = TeamMember.objects.filter(project=project, removed_at__isnull=True).count()
+                team_size = max(len(unique_assignees), team_members_count, 1)  # At least 1 person
+            except Exception as e:
+                self.log_action("Error getting team size", {"error": str(e)})
+                team_size = 1  # Default to 1 if can't determine
+        
+        if team_size is None or team_size < 1:
+            team_size = 1
+        
+        # Calculate base statistics from task data
+        total_estimated_hours = 0
+        tasks_with_estimates = 0
+        tasks_with_actual = 0
+        total_actual_hours = 0
+        tasks_with_deps = 0
+        dependency_chains = []
+        
+        for task in tasks:
+            estimated = task.get('estimated_hours')
+            actual = task.get('actual_hours')
+            dependencies = task.get('dependencies', [])
+            
+            if estimated and estimated > 0:
+                total_estimated_hours += float(estimated)
+                tasks_with_estimates += 1
+            elif actual and actual > 0:
+                total_estimated_hours += float(actual)
+                total_actual_hours += float(actual)
+                tasks_with_actual += 1
+            else:
+                # Estimate based on priority
+                priority = task.get('priority', 'medium')
+                if priority == 'high':
+                    hours = 12
+                elif priority == 'low':
+                    hours = 4
+                else:
+                    hours = 8
+                total_estimated_hours += hours
+            
+            if dependencies and len(dependencies) > 0:
+                tasks_with_deps += 1
+                dependency_chains.append({
+                    'task_id': task.get('id'),
+                    'title': task.get('title', '')[:50],
+                    'dependencies_count': len(dependencies)
+                })
+        
+        # Calculate parallelization potential
+        # Tasks without dependencies can be done in parallel
+        parallelizable_tasks = len(tasks) - tasks_with_deps
+        max_parallel_tasks = min(team_size, parallelizable_tasks)
+        
         # Prepare task summary for AI
         import json
         task_summary = []
-        for task in tasks[:30]:  # Limit for token efficiency
+        for task in tasks[:50]:  # Limit for token efficiency
             task_summary.append({
                 'id': task.get('id'),
                 'title': task.get('title', '')[:50],
                 'estimated_hours': task.get('estimated_hours'),
+                'actual_hours': task.get('actual_hours'),
                 'priority': task.get('priority', 'medium'),
                 'status': task.get('status', 'todo'),
                 'dependencies_count': len(task.get('dependencies', [])),
                 'has_due_date': bool(task.get('due_date'))
             })
         
-        # Use AI for more accurate estimation
-        prompt = f"""You are a project estimation expert. Analyze these tasks and provide accurate duration estimates.
+        # Use AI for intelligent estimation with team size and parallelization
+        prompt = f"""You are an expert project estimation analyst. Analyze this project and provide accurate, detailed duration estimates.
 
-Tasks Summary:
-{json.dumps(task_summary, indent=2)}
+PROJECT STATISTICS:
+- Total Tasks: {len(tasks)}
+- Tasks with Estimated Hours: {tasks_with_estimates}
+- Tasks with Actual Hours: {tasks_with_actual}
+- Total Estimated Hours: {round(total_estimated_hours, 2)}
+- Tasks with Dependencies: {tasks_with_deps}
+- Team Size: {team_size} people
+- Parallelizable Tasks (no dependencies): {parallelizable_tasks}
+- Maximum Parallel Tasks: {max_parallel_tasks}
 
-Total Tasks: {len(tasks)}
-Tasks with Estimated Hours: {sum(1 for t in tasks if t.get('estimated_hours'))}
-Tasks with Dependencies: {sum(1 for t in tasks if t.get('dependencies'))}
+TASK DETAILS:
+{json.dumps(task_summary[:30], indent=2)}
 
-Provide duration estimates considering:
-1. Task complexity (based on titles and descriptions)
-2. Dependencies (critical path analysis)
-3. Resource availability (assume standard team)
-4. Risk factors (high priority tasks, dependencies, etc.)
-5. Historical patterns (tasks often take 20-30% longer than estimated)
+CRITICAL CONSIDERATIONS:
+1. TEAM SIZE & PARALLELIZATION: With {team_size} people, tasks can be done in parallel. 
+   - If 6 people can do a project in 10 days, 12 people can do it in ~5-6 days (accounting for coordination overhead)
+   - Not all tasks can be parallelized due to dependencies
+   - Coordination overhead: More people = more communication needed (typically 10-20% overhead per additional person beyond optimal team size)
+   - Optimal parallelization: Consider which tasks can truly run in parallel vs sequential
 
-Calculate:
-- Total estimated hours (sum of all task estimates, or estimate if missing)
-- Working days needed (8 hours per day)
-- Calendar days (accounting for weekends, 5-day work weeks)
-- Optimistic scenario (best case, 15% faster)
-- Realistic scenario (most likely, with buffers)
-- Pessimistic scenario (worst case, 30% slower with delays)
-- Expected duration (PERT: (optimistic + 4*realistic + pessimistic) / 6)
+2. DEPENDENCIES: {tasks_with_deps} tasks have dependencies, creating sequential bottlenecks
+   - Critical path analysis: Longest chain of dependent tasks determines minimum duration
+   - Dependency delays can cascade through the project
 
-Return JSON:
+3. TASK COMPLEXITY: Analyze task titles and priorities to estimate realistic durations
+   - High priority tasks often indicate complexity
+   - Tasks with actual hours provide historical data
+
+4. REALISTIC ESTIMATION:
+   - Base calculation: Total hours / (8 hours/day * team_size * parallelization_factor)
+   - Parallelization factor: Account for tasks that can run simultaneously vs sequentially
+   - Buffer for dependencies: Add time for dependency-related delays
+   - Buffer for coordination: More team members = more coordination needed
+
+CALCULATE AND RETURN JSON:
 {{
-  "total_estimated_hours": number,
-  "working_days": {{
-    "optimistic": number,
-    "realistic": number,
-    "pessimistic": number,
-    "expected": number
+  "total_estimated_hours": number (sum of all task hours),
+  "sequential_hours": number (hours that must be done sequentially due to dependencies),
+  "parallelizable_hours": number (hours that can be done in parallel),
+  "effective_working_days": {{
+    "optimistic": number (best case with optimal parallelization, 15% faster),
+    "realistic": number (most likely with realistic parallelization and buffers),
+    "pessimistic": number (worst case with delays, 30% slower),
+    "expected": number (PERT: (optimistic + 4*realistic + pessimistic) / 6)
   }},
   "calendar_days": {{
-    "expected": number,
+    "expected": number (accounting for weekends, 5-day work weeks),
     "weeks": number
   }},
-  "dependency_buffer_days": number,
-  "risk_buffer_days": number,
-  "recommendations": {{
-    "suggested_deadline_days": number,
-    "suggested_deadline_weeks": number,
-    "confidence_level": "high|medium|low",
-    "key_risks": ["risk1", "risk2"],
-    "notes": "brief explanation of estimates and assumptions"
+  "team_efficiency": {{
+    "current_team_size": {team_size},
+    "optimal_team_size": number (suggested optimal team size),
+    "parallelization_ratio": number (0-1, how much work can be parallelized),
+    "coordination_overhead_percent": number (overhead due to team size)
+  }},
+  "ai_reasoning": "DETAILED explanation (5-8 sentences): WHY this project will take this estimated time. Explain the key factors: total work hours, team size impact, dependency bottlenecks, parallelization opportunities, coordination overhead, and any other significant factors. Be specific about numbers and calculations.",
+  "improvement_suggestions": [
+    "Specific suggestion 1 on how to reduce time (e.g., 'Add 3 more developers to parallelize frontend and backend work, reducing timeline by ~40%')",
+    "Specific suggestion 2 (e.g., 'Break down Task X into smaller subtasks to enable earlier parallel work')",
+    "Specific suggestion 3 (e.g., 'Reduce dependencies by reordering tasks Y and Z')",
+    "At least 3-5 concrete, actionable suggestions"
+  ],
+  "dependency_analysis": {{
+    "critical_path_length_days": number (longest dependency chain),
+    "bottleneck_tasks": ["task title 1", "task title 2"],
+    "dependency_impact_percent": number (how much dependencies slow down the project)
   }}
 }}"""
         
         try:
-            response = self._call_llm(prompt, self.system_prompt, temperature=0.3, max_tokens=1500)
+            # Use temperature=0 for consistency (same input = same output)
+            response = self._call_llm(prompt, self.system_prompt, temperature=0, max_tokens=2000)
             
             # Extract JSON
             if "```json" in response:
@@ -1426,53 +1517,30 @@ Return JSON:
             self.log_action("AI estimation failed, using fallback", {"error": str(e)})
             ai_estimates = None
         
-        # Calculate base estimates
-        total_estimated_hours = sum(
-            task.get('estimated_hours', 0) or 0 
-            for task in tasks 
-            if task.get('estimated_hours')
-        )
-        
-        if total_estimated_hours == 0:
-            total_estimated_hours = len(tasks) * 8
-        
-        working_days = total_estimated_hours / 8
-        tasks_with_deps = sum(1 for task in tasks if task.get('dependencies'))
-        dependency_buffer = tasks_with_deps * 0.5
-        
-        # Use AI estimates if available, otherwise use calculated
-        if ai_estimates:
-            estimates = {
-                'total_tasks': len(tasks),
-                'total_estimated_hours': round(ai_estimates.get('total_estimated_hours', total_estimated_hours), 2),
-                'working_days': {
-                    'optimistic': round(ai_estimates['working_days'].get('optimistic', working_days * 0.85), 1),
-                    'realistic': round(ai_estimates['working_days'].get('realistic', working_days + dependency_buffer), 1),
-                    'pessimistic': round(ai_estimates['working_days'].get('pessimistic', working_days * 1.3 + dependency_buffer), 1),
-                    'expected': round(ai_estimates['working_days'].get('expected', (working_days * 0.85 + 4 * (working_days + dependency_buffer) + (working_days * 1.3 + dependency_buffer)) / 6), 1)
-                },
-                'calendar_days': {
-                    'expected': round(ai_estimates['calendar_days'].get('expected', (ai_estimates['working_days'].get('expected', working_days) / 5) * 7), 1),
-                    'weeks': round(ai_estimates['calendar_days'].get('weeks', ai_estimates['working_days'].get('expected', working_days) / 5), 1)
-                },
-                'dependency_buffer_days': round(ai_estimates.get('dependency_buffer_days', dependency_buffer), 1),
-                'risk_buffer_days': round(ai_estimates.get('risk_buffer_days', 0), 1),
-                'tasks_with_dependencies': tasks_with_deps
-            }
-            recommendations = ai_estimates.get('recommendations', {})
-        else:
-            # Fallback calculations
-            optimistic_days = working_days * 0.85
-            realistic_days = working_days + dependency_buffer
-            pessimistic_days = working_days * 1.3 + dependency_buffer
-            expected_days = (optimistic_days + 4 * realistic_days + pessimistic_days) / 6
-            calendar_weeks = expected_days / 5
-            calendar_days = calendar_weeks * 7
+        # Fallback calculations if AI fails
+        if not ai_estimates:
+            # Base calculation
+            base_working_days = total_estimated_hours / (8.0 * team_size)
             
-            estimates = {
-                'total_tasks': len(tasks),
+            # Account for parallelization (not all tasks can be parallelized)
+            parallelization_factor = 0.6 if team_size > 1 else 1.0  # 60% parallelization with team
+            effective_days = base_working_days / parallelization_factor
+            
+            # Dependency impact
+            dependency_multiplier = 1.0 + (tasks_with_deps * 0.1 / max(1, len(tasks)))
+            adjusted_days = effective_days * dependency_multiplier
+            
+            optimistic_days = adjusted_days * 0.85
+            realistic_days = adjusted_days * 1.20
+            pessimistic_days = adjusted_days * 1.35
+            expected_days = (optimistic_days + (4 * realistic_days) + pessimistic_days) / 6.0
+            
+            calendar_weeks = expected_days / 5.0
+            calendar_days = calendar_weeks * 7.0
+            
+            ai_estimates = {
                 'total_estimated_hours': round(total_estimated_hours, 2),
-                'working_days': {
+                'effective_working_days': {
                     'optimistic': round(optimistic_days, 1),
                     'realistic': round(realistic_days, 1),
                     'pessimistic': round(pessimistic_days, 1),
@@ -1482,35 +1550,93 @@ Return JSON:
                     'expected': round(calendar_days, 1),
                     'weeks': round(calendar_weeks, 1)
                 },
-                'dependency_buffer_days': round(dependency_buffer, 1),
-                'risk_buffer_days': 0,
-                'tasks_with_dependencies': tasks_with_deps
-            }
-            recommendations = {
-                'suggested_deadline_days': round(expected_days + 3, 1),
-                'suggested_deadline_weeks': round((expected_days + 3) / 5, 1),
-                'confidence_level': 'medium',
-                'key_risks': ['Uncertain task estimates', 'Dependency delays'],
-                'notes': 'Estimates assume 8-hour working days and 5-day work weeks. Add buffer for unexpected delays.'
+                'team_efficiency': {
+                    'current_team_size': team_size,
+                    'optimal_team_size': team_size,
+                    'parallelization_ratio': parallelization_factor,
+                    'coordination_overhead_percent': max(0, (team_size - 1) * 5)
+                },
+                'ai_reasoning': f'Fallback calculation: {total_estimated_hours} total hours divided by {team_size} team members with {parallelization_factor*100}% parallelization efficiency. Includes dependency buffers.',
+                'improvement_suggestions': [
+                    'Add more team members to increase parallelization',
+                    'Reduce task dependencies to enable more parallel work',
+                    'Break down large tasks into smaller, parallelizable subtasks'
+                ],
+                'dependency_analysis': {
+                    'critical_path_length_days': round(realistic_days, 1),
+                    'bottleneck_tasks': [],
+                    'dependency_impact_percent': round((dependency_multiplier - 1) * 100, 1)
+                }
             }
         
         # Get actual span if tasks have due dates
         tasks_with_dates = [t for t in tasks if t.get('due_date')]
+        actual_span_days = None
         if tasks_with_dates:
             try:
-                dates = [datetime.fromisoformat(t['due_date'].replace('Z', '+00:00')) for t in tasks_with_dates if t.get('due_date')]
+                dates = []
+                for t in tasks_with_dates:
+                    due_date = t.get('due_date')
+                    if due_date:
+                        if isinstance(due_date, str):
+                            dates.append(datetime.fromisoformat(due_date.replace('Z', '+00:00')))
+                        else:
+                            dates.append(due_date)
                 if dates:
                     earliest_date = min(dates)
                     latest_date = max(dates)
-                    actual_span_days = (latest_date - earliest_date).days
-                else:
-                    actual_span_days = None
-            except:
+                    actual_span_days = (latest_date - earliest_date).days + 1
+            except Exception as e:
+                self.log_action("Error calculating actual span", {"error": str(e)})
                 actual_span_days = None
-        else:
-            actual_span_days = None
         
-        estimates['actual_span_days'] = actual_span_days
+        # Build estimates dictionary
+        estimates = {
+            'total_tasks': len(tasks),
+            'tasks_with_estimated_hours': tasks_with_estimates,
+            'tasks_with_actual_hours': tasks_with_actual,
+            'total_estimated_hours': round(ai_estimates.get('total_estimated_hours', total_estimated_hours), 2),
+            'working_days': ai_estimates.get('effective_working_days', {
+                'optimistic': 0,
+                'realistic': 0,
+                'pessimistic': 0,
+                'expected': 0
+            }),
+            'calendar_days': ai_estimates.get('calendar_days', {
+                'expected': 0,
+                'weeks': 0
+            }),
+            'team_efficiency': ai_estimates.get('team_efficiency', {
+                'current_team_size': team_size,
+                'optimal_team_size': team_size,
+                'parallelization_ratio': 0.6,
+                'coordination_overhead_percent': 0
+            }),
+            'tasks_with_dependencies': tasks_with_deps,
+            'actual_span_days': actual_span_days,
+            'dependency_analysis': ai_estimates.get('dependency_analysis', {})
+        }
+        
+        # Build recommendations with AI insights
+        recommendations = {
+            'suggested_deadline_days': round(estimates['working_days']['expected'] + 2, 1),
+            'suggested_deadline_weeks': round((estimates['working_days']['expected'] + 2) / 5.0, 1),
+            'confidence_level': 'high' if tasks_with_estimates > len(tasks) * 0.7 else ('medium' if tasks_with_estimates > len(tasks) * 0.3 else 'low'),
+            'ai_reasoning': ai_estimates.get('ai_reasoning', 'AI analysis unavailable'),
+            'improvement_suggestions': ai_estimates.get('improvement_suggestions', [
+                'Add more team members to increase parallelization',
+                'Reduce task dependencies',
+                'Break down large tasks'
+            ]),
+            'key_risks': []
+        }
+        
+        if tasks_with_estimates < len(tasks) * 0.5:
+            recommendations['key_risks'].append('Many tasks lack time estimates')
+        if tasks_with_deps > len(tasks) * 0.4:
+            recommendations['key_risks'].append('High dependency count may cause delays')
+        if team_size < 3 and len(tasks) > 10:
+            recommendations['key_risks'].append('Small team size may slow down project with many tasks')
         
         return {
             'success': True,
@@ -1570,9 +1696,13 @@ Return JSON:
         """
         Check and alert on upcoming deadlines and milestones.
         
+        Shows:
+        1. Tasks that are not completed and have less than 20% of total time remaining
+        2. Tasks that have passed their deadline and are not completed
+        
         Args:
             project_id (int): Project ID
-            days_ahead (int): Number of days to look ahead
+            days_ahead (int): Number of days to look ahead (not used in new logic, kept for compatibility)
             
         Returns:
             Dict: Upcoming deadlines and alerts
@@ -1588,56 +1718,97 @@ Return JSON:
             }
         
         now = timezone.now()
-        future_date = now + timedelta(days=days_ahead)
-        
-        # Get tasks with deadlines in the next N days
-        upcoming_tasks = Task.objects.filter(
-            project=project,
-            due_date__gte=now,
-            due_date__lte=future_date,
-            status__in=['todo', 'in_progress', 'review']
-        ).select_related('assignee').order_by('due_date')
-        
-        # Get overdue tasks
-        overdue_tasks = Task.objects.filter(
-            project=project,
-            due_date__lt=now,
-            status__in=['todo', 'in_progress', 'review']
-        ).select_related('assignee').order_by('due_date')
-        
         alerts = []
         
-        # Process upcoming tasks
-        for task in upcoming_tasks:
-            days_until = (task.due_date - now).days
-            urgency = 'high' if days_until <= 2 else ('medium' if days_until <= 5 else 'low')
-            
-            alerts.append({
-                'type': 'upcoming',
-                'task_id': task.id,
-                'title': task.title,
-                'due_date': task.due_date.isoformat(),
-                'days_until': days_until,
-                'urgency': urgency,
-                'status': task.status,
-                'priority': task.priority,
-                'assignee': task.assignee.username if task.assignee else None
-            })
+        # Get all tasks that are not completed and have a due_date
+        incomplete_tasks = Task.objects.filter(
+            project=project,
+            due_date__isnull=False,
+            status__in=['todo', 'in_progress', 'review', 'blocked']
+        ).select_related('assignee').order_by('due_date')
         
-        # Process overdue tasks
-        for task in overdue_tasks:
-            days_overdue = (now - task.due_date).days
-            alerts.append({
-                'type': 'overdue',
-                'task_id': task.id,
-                'title': task.title,
-                'due_date': task.due_date.isoformat(),
-                'days_overdue': days_overdue,
-                'urgency': 'critical',
-                'status': task.status,
-                'priority': task.priority,
-                'assignee': task.assignee.username if task.assignee else None
-            })
+        for task in incomplete_tasks:
+            if not task.due_date:
+                continue
+                
+            # Convert due_date to datetime for comparison if it's a date
+            if isinstance(task.due_date, date_type):
+                task_due_datetime = datetime.combine(task.due_date, datetime.min.time())
+                task_due_datetime = timezone.make_aware(task_due_datetime)
+            else:
+                task_due_datetime = task.due_date
+            
+            # Check if task is overdue (deadline has passed)
+            is_overdue = task_due_datetime < now
+            
+            if is_overdue:
+                # Task is overdue - show it
+                days_overdue = (now - task_due_datetime).days
+                alerts.append({
+                    'type': 'overdue',
+                    'task_id': task.id,
+                    'task_title': task.title,
+                    'title': task.title,
+                    'due_date': task_due_datetime.isoformat(),
+                    'days_overdue': days_overdue,
+                    'urgency': 'critical',
+                    'status': task.status,
+                    'priority': task.priority,
+                    'assignee': task.assignee.username if task.assignee else None,
+                    'assignee_name': task.assignee.username if task.assignee else 'Unassigned'
+                })
+            else:
+                # Task is not overdue - check if less than 20% time remaining
+                # Calculate total time: from task start (created_at or project start) to due_date
+                task_start = None
+                if task.created_at:
+                    task_start = task.created_at
+                elif project.start_date:
+                    task_start = datetime.combine(project.start_date, datetime.min.time())
+                    if timezone.is_naive(task_start):
+                        task_start = timezone.make_aware(task_start)
+                else:
+                    # Fallback: use task creation date or project creation date
+                    task_start = now - timedelta(days=30)  # Default to 30 days ago if no start date
+                    if timezone.is_naive(task_start):
+                        task_start = timezone.make_aware(task_start)
+                
+                if isinstance(task_start, date_type):
+                    task_start = datetime.combine(task_start, datetime.min.time())
+                    if timezone.is_naive(task_start):
+                        task_start = timezone.make_aware(task_start)
+                
+                # Calculate total time duration
+                total_time_delta = task_due_datetime - task_start
+                total_time_days = total_time_delta.total_seconds() / (24 * 3600)
+                
+                # Calculate remaining time
+                remaining_time_delta = task_due_datetime - now
+                remaining_time_days = remaining_time_delta.total_seconds() / (24 * 3600)
+                
+                # Check if less than 20% of total time is remaining
+                if total_time_days > 0:
+                    remaining_percentage = (remaining_time_days / total_time_days) * 100
+                    
+                    if remaining_percentage < 20:
+                        # Less than 20% time remaining - show this task
+                        days_until = remaining_time_days
+                        urgency = 'critical' if remaining_percentage < 5 else ('high' if remaining_percentage < 10 else 'medium')
+                        
+                        alerts.append({
+                            'type': 'upcoming',
+                            'task_id': task.id,
+                            'task_title': task.title,
+                            'title': task.title,
+                            'due_date': task_due_datetime.isoformat(),
+                            'days_until': int(days_until) if days_until > 0 else 0,
+                            'urgency': urgency,
+                            'status': task.status,
+                            'priority': task.priority,
+                            'assignee': task.assignee.username if task.assignee else None,
+                            'assignee_name': task.assignee.username if task.assignee else 'Unassigned',
+                            'remaining_percentage': round(remaining_percentage, 1)
+                        })
         
         # Check project deadline
         if project.end_date:
@@ -2558,7 +2729,9 @@ Return JSON:
             
             elif action == 'calculate_duration':
                 tasks = kwargs.get('tasks', [])
-                return self.calculate_duration_estimate(tasks)
+                project_id = kwargs.get('project_id')
+                team_size = kwargs.get('team_size')
+                return self.calculate_duration_estimate(tasks, project_id=project_id, team_size=team_size)
             
             elif action == 'manage_phases':
                 phases = kwargs.get('phases')

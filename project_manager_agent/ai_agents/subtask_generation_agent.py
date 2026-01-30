@@ -68,11 +68,13 @@ Task Information:
 Your goal is to break down this task into {optimal_count} detailed, actionable subtasks that help someone understand exactly what they need to do to complete this task efficiently.
 
 CRITICAL REQUIREMENTS for subtask descriptions:
-Each subtask description must be COMPREHENSIVE (4-5 sentences) and include:
+Each subtask description must be COMPREHENSIVE (6-8 sentences) and include:
 1. WHAT the subtask is - Clear explanation of what needs to be accomplished in this step
-2. HOW to do it - Step-by-step methodology and approach specific to this subtask
-3. WHICH TOOLS to use - Specific technologies, frameworks, libraries, commands, or tools needed for this subtask
-4. MOST EFFICIENT WAY - Best practices, shortcuts, optimizations, and efficient approaches for this specific subtask
+2. HOW to do it - Detailed step-by-step methodology and approach specific to this subtask (be specific about the process)
+3. WHY this subtask is relevant - Explain how this subtask contributes to completing the parent task and why it's necessary
+4. WHICH TOOLS/TECHNOLOGIES to use - Specific technologies, frameworks, libraries, commands, software, or tools needed for this subtask (be specific: e.g., "React.js for frontend", "PostgreSQL database", "Docker for containerization", "Git for version control")
+5. MOST EFFICIENT WAY - Best practices, shortcuts, optimizations, and efficient approaches for this specific subtask
+6. DEPENDENCIES - What needs to be done before this subtask (if any) and what this subtask enables next
 
 IMPORTANT: You must also provide a DETAILED reasoning explaining:
 - WHY this task should be broken down in this specific way
@@ -92,11 +94,13 @@ Guidelines for creating subtasks:
 
 For each subtask, provide:
 - title: A clear, specific title (e.g., "Set up OAuth integration with Instagram API" or "Design database schema for trust ledger")
-- description: A COMPREHENSIVE description (4-5 sentences) that includes:
-  * WHAT the subtask is - what needs to be accomplished
-  * HOW to do it - step-by-step approach and methodology
-  * WHICH TOOLS to use - specific tools, technologies, frameworks, or commands
-  * MOST EFFICIENT WAY - best practices, optimizations, and efficient approaches
+- description: A COMPREHENSIVE description (6-8 sentences) that includes:
+  * WHAT the subtask is - what needs to be accomplished in this step
+  * HOW to do it - detailed step-by-step approach and methodology (be specific about the process)
+  * WHY this subtask is relevant - how this subtask contributes to completing the parent task and why it's necessary
+  * WHICH TOOLS/TECHNOLOGIES to use - specific tools, technologies, frameworks, libraries, software, or commands needed (be specific: e.g., "React.js", "PostgreSQL", "Docker", "Git", "Node.js", "Express.js", "JWT", etc.)
+  * MOST EFFICIENT WAY - best practices, optimizations, shortcuts, and efficient approaches
+  * DEPENDENCIES - what needs to be done before this subtask and what this subtask enables next
 - order: The sequence number (1, 2, 3, etc.) indicating when this subtask should be done
 
 Return a JSON object with this structure:
@@ -104,12 +108,12 @@ Return a JSON object with this structure:
   "subtasks": [
     {{
       "title": "Specific subtask title",
-      "description": "COMPREHENSIVE description (4-5 sentences): WHAT this subtask accomplishes, HOW to do it step-by-step, WHICH TOOLS/technologies to use, and the MOST EFFICIENT WAY to complete it. Make it detailed enough that a developer can understand exactly what to do and how to do it efficiently.",
+      "description": "COMPREHENSIVE description (6-8 sentences): WHAT this subtask accomplishes, HOW to do it step-by-step (detailed methodology), WHY this subtask is relevant to the parent task, WHICH TOOLS/TECHNOLOGIES to use (be specific: e.g., React.js, PostgreSQL, Docker, Git, Node.js, etc.), the MOST EFFICIENT WAY to complete it, and what DEPENDENCIES exist. Make it detailed enough that a developer can understand exactly what to do, how to do it, why it's needed, and what tools to use.",
       "order": 1
     }},
     {{
       "title": "Next subtask title",
-      "description": "COMPREHENSIVE description (4-5 sentences) following the same format...",
+      "description": "COMPREHENSIVE description (6-8 sentences) following the same format: WHAT, HOW, WHY relevant, TOOLS/TECHNOLOGIES, EFFICIENT WAY, DEPENDENCIES...",
       "order": 2
     }}
   ],
@@ -121,7 +125,9 @@ Rules:
 - Create 4-8 subtasks (adjust based on task complexity - more complex tasks need more subtasks)
 - Make subtasks specific to this task (not generic)
 - Order subtasks logically (order field: 1, 2, 3, etc.) for efficient execution
-- Each subtask description must be COMPREHENSIVE (4-5 sentences) covering WHAT, HOW, WHICH TOOLS, and MOST EFFICIENT WAY
+- Each subtask description must be COMPREHENSIVE (6-8 sentences) covering WHAT, HOW (detailed steps), WHY relevant, TOOLS/TECHNOLOGIES (be specific), EFFICIENT WAY, and DEPENDENCIES
+- Always mention specific tools, technologies, frameworks, or software needed (e.g., "Use React.js for the frontend component", "Set up PostgreSQL database", "Use Docker for containerization")
+- Explain why each subtask is relevant to completing the parent task
 - Include detailed task_reasoning explaining the breakdown strategy and efficiency considerations"""
 
         try:

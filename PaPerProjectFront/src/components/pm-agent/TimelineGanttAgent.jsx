@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
 import pmAgentService from '@/services/pmAgentService';
-import { Loader2, Calendar, BarChart3, Clock, AlertCircle, Settings, Layers, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, Calendar, BarChart3, Clock, AlertCircle, Settings, Layers, ChevronDown, ChevronUp, BrainCircuit, TrendingUp } from 'lucide-react';
 import {
   PieChart,
   Pie,
@@ -1077,20 +1077,20 @@ const TimelineGanttAgent = ({ projects = [] }) => {
                   </p>
                   {result.data.summary && (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                      <div className="p-3 border rounded-lg">
-                        <div className="text-2xl font-bold">{result.data.summary.total_alerts || 0}</div>
+                      <div className="p-3 border rounded-lg bg-card border-border">
+                        <div className="text-2xl font-bold text-foreground">{result.data.summary.total_alerts || 0}</div>
                         <div className="text-sm text-muted-foreground">Total Alerts</div>
                       </div>
-                      <div className="p-3 border rounded-lg border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800">
-                        <div className="text-2xl font-bold text-red-600 dark:text-red-400">{result.data.summary.overdue_count || 0}</div>
+                      <div className="p-3 border rounded-lg bg-card border-red-500/30">
+                        <div className="text-2xl font-bold text-red-400">{result.data.summary.overdue_count || 0}</div>
                         <div className="text-sm text-muted-foreground">Overdue</div>
                       </div>
-                      <div className="p-3 border rounded-lg border-yellow-200 bg-yellow-50 dark:bg-yellow-950 dark:border-yellow-800">
-                        <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{result.data.summary.upcoming_count || 0}</div>
+                      <div className="p-3 border rounded-lg bg-card border-yellow-500/30">
+                        <div className="text-2xl font-bold text-yellow-400">{result.data.summary.upcoming_count || 0}</div>
                         <div className="text-sm text-muted-foreground">Upcoming</div>
                       </div>
-                      <div className="p-3 border rounded-lg border-orange-200 bg-orange-50 dark:bg-orange-950 dark:border-orange-800">
-                        <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{result.data.summary.critical_count || 0}</div>
+                      <div className="p-3 border rounded-lg bg-card border-orange-500/30">
+                        <div className="text-2xl font-bold text-orange-400">{result.data.summary.critical_count || 0}</div>
                         <div className="text-sm text-muted-foreground">Critical</div>
                       </div>
                     </div>
@@ -1099,22 +1099,22 @@ const TimelineGanttAgent = ({ projects = [] }) => {
                     result.data.alerts.map((alert, index) => (
                       <div
                         key={index}
-                        className={`p-3 border rounded-lg ${
+                        className={`p-3 border rounded-lg bg-card ${
                           alert.urgency === 'critical' 
-                            ? 'border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800'
+                            ? 'border-red-500/30'
                             : alert.urgency === 'high'
-                            ? 'border-orange-200 bg-orange-50 dark:bg-orange-950 dark:border-orange-800'
-                            : 'border-yellow-200 bg-yellow-50 dark:bg-yellow-950 dark:border-yellow-800'
+                            ? 'border-orange-500/30'
+                            : 'border-yellow-500/30'
                         }`}
                       >
-                        <p className="font-medium">
+                        <p className="font-medium text-foreground">
                           {alert.title || alert.task_title || 'Task'}
                         </p>
                         <p className="text-sm text-muted-foreground mt-1">
                           {alert.type === 'overdue' 
                             ? `Overdue by ${alert.days_overdue} day(s)`
                             : alert.type === 'upcoming'
-                            ? `Due in ${alert.days_until} day(s)`
+                            ? `Due in ${alert.days_until} day(s)${alert.remaining_percentage ? ` (${alert.remaining_percentage}% time remaining)` : ''}`
                             : alert.type === 'project_deadline'
                             ? `Project deadline in ${alert.days_until} day(s)`
                             : ''}
@@ -1124,11 +1124,16 @@ const TimelineGanttAgent = ({ projects = [] }) => {
                             Due: {new Date(alert.due_date).toLocaleDateString()}
                           </p>
                         )}
+                        {alert.assignee_name && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Assignee: {alert.assignee_name}
+                          </p>
+                        )}
                       </div>
                     ))
                   ) : (
-                    <div className="p-4 bg-green-50 border border-green-200 rounded-lg dark:bg-green-950 dark:border-green-800">
-                      <p className="text-sm text-green-800 dark:text-green-200">
+                    <div className="p-4 bg-card border border-green-500/30 rounded-lg">
+                      <p className="text-sm text-green-400">
                         ✓ No deadline alerts found. All tasks are on track!
                       </p>
                     </div>
@@ -1146,12 +1151,12 @@ const TimelineGanttAgent = ({ projects = [] }) => {
                   {result.data.deadline_warnings.map((warning, index) => (
                     <div
                       key={index}
-                      className="p-3 border border-yellow-200 rounded-lg bg-yellow-50 dark:bg-yellow-950 dark:border-yellow-800"
+                      className="p-3 border border-yellow-500/30 rounded-lg bg-card"
                     >
-                      <p className="font-medium text-yellow-800 dark:text-yellow-200">
+                      <p className="font-medium text-yellow-400">
                         {warning.task_title || 'Task'}
                       </p>
-                      <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+                      <p className="text-sm text-muted-foreground mt-1">
                         {warning.message || warning.reasoning}
                       </p>
                     </div>
@@ -1237,47 +1242,151 @@ const TimelineGanttAgent = ({ projects = [] }) => {
 
               {/* Duration Estimates (from calculate_duration action) */}
               {result.data?.estimates && (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <p className="text-sm font-medium">Duration Estimates:</p>
+                  
+                  {/* Team Efficiency Info */}
+                  {result.data.estimates.team_efficiency && (
+                    <div className="p-3 border rounded-lg bg-card">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
+                        <div>
+                          <div className="text-lg font-bold text-foreground">{result.data.estimates.team_efficiency.current_team_size || 1}</div>
+                          <div className="text-xs text-muted-foreground">Team Members</div>
+                        </div>
+                        <div>
+                          <div className="text-lg font-bold text-foreground">{Math.round((result.data.estimates.team_efficiency.parallelization_ratio || 0) * 100)}%</div>
+                          <div className="text-xs text-muted-foreground">Parallelization</div>
+                        </div>
+                        <div>
+                          <div className="text-lg font-bold text-foreground">{result.data.estimates.team_efficiency.optimal_team_size || result.data.estimates.team_efficiency.current_team_size || 1}</div>
+                          <div className="text-xs text-muted-foreground">Optimal Team Size</div>
+                        </div>
+                        <div>
+                          <div className="text-lg font-bold text-foreground">{result.data.estimates.team_efficiency.coordination_overhead_percent || 0}%</div>
+                          <div className="text-xs text-muted-foreground">Coordination Overhead</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="p-3 border rounded-lg">
-                      <div className="text-2xl font-bold">{result.data.estimates.working_days?.expected?.toFixed(1) || 'N/A'}</div>
+                    <div className="p-3 border rounded-lg bg-card">
+                      <div className="text-2xl font-bold text-foreground">{result.data.estimates.working_days?.expected?.toFixed(1) || 'N/A'}</div>
                       <div className="text-sm text-muted-foreground">Expected Working Days</div>
                     </div>
-                    <div className="p-3 border rounded-lg">
-                      <div className="text-2xl font-bold text-green-600">{result.data.estimates.working_days?.optimistic?.toFixed(1) || 'N/A'}</div>
+                    <div className="p-3 border rounded-lg bg-card">
+                      <div className="text-2xl font-bold text-green-400">{result.data.estimates.working_days?.optimistic?.toFixed(1) || 'N/A'}</div>
                       <div className="text-sm text-muted-foreground">Optimistic</div>
                     </div>
-                    <div className="p-3 border rounded-lg">
-                      <div className="text-2xl font-bold text-blue-600">{result.data.estimates.working_days?.realistic?.toFixed(1) || 'N/A'}</div>
+                    <div className="p-3 border rounded-lg bg-card">
+                      <div className="text-2xl font-bold text-blue-400">{result.data.estimates.working_days?.realistic?.toFixed(1) || 'N/A'}</div>
                       <div className="text-sm text-muted-foreground">Realistic</div>
                     </div>
-                    <div className="p-3 border rounded-lg">
-                      <div className="text-2xl font-bold text-red-600">{result.data.estimates.working_days?.pessimistic?.toFixed(1) || 'N/A'}</div>
+                    <div className="p-3 border rounded-lg bg-card">
+                      <div className="text-2xl font-bold text-red-400">{result.data.estimates.working_days?.pessimistic?.toFixed(1) || 'N/A'}</div>
                       <div className="text-sm text-muted-foreground">Pessimistic</div>
                     </div>
                   </div>
-                  {result.data.estimates.calendar_days && (
-                    <div className="p-3 border rounded-lg bg-blue-50 dark:bg-blue-950">
-                      <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
-                        Calendar Time: {result.data.estimates.calendar_days.expected?.toFixed(1) || 'N/A'} days ({result.data.estimates.calendar_days.weeks?.toFixed(1) || 'N/A'} weeks)
+                  
+                  <div className="p-3 border rounded-lg bg-card">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-lg font-bold text-foreground">{result.data.estimates.total_estimated_hours?.toFixed(1) || 'N/A'}</div>
+                        <div className="text-sm text-muted-foreground">Total Estimated Hours</div>
+                      </div>
+                      {result.data.estimates.calendar_days && (
+                        <div>
+                          <div className="text-lg font-bold text-foreground">
+                            {result.data.estimates.calendar_days.expected?.toFixed(1) || 'N/A'} days ({result.data.estimates.calendar_days.weeks?.toFixed(1) || 'N/A'} weeks)
+                          </div>
+                          <div className="text-sm text-muted-foreground">Calendar Time</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* AI Reasoning */}
+                  {result.data.recommendations?.ai_reasoning && (
+                    <div className="p-4 border rounded-lg bg-card">
+                      <p className="text-sm font-medium mb-2 flex items-center gap-2">
+                        <BrainCircuit className="h-4 w-4" />
+                        AI Analysis & Reasoning:
                       </p>
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{result.data.recommendations.ai_reasoning}</p>
                     </div>
                   )}
-                  {result.data.recommendations && (
-                    <div className="p-3 border rounded-lg bg-muted">
-                      <p className="text-sm font-medium mb-2">Recommendations:</p>
-                      <p className="text-sm text-muted-foreground">{result.data.recommendations.notes}</p>
-                      {result.data.recommendations.key_risks && result.data.recommendations.key_risks.length > 0 && (
+                  
+                  {/* Improvement Suggestions */}
+                  {result.data.recommendations?.improvement_suggestions && result.data.recommendations.improvement_suggestions.length > 0 && (
+                    <div className="p-4 border rounded-lg bg-card">
+                      <p className="text-sm font-medium mb-3 flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4" />
+                        How to Reduce Timeline:
+                      </p>
+                      <ul className="space-y-2">
+                        {result.data.recommendations.improvement_suggestions.map((suggestion, idx) => (
+                          <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
+                            <span className="text-primary mt-1">•</span>
+                            <span>{suggestion}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  
+                  {/* Dependency Analysis */}
+                  {result.data.estimates.dependency_analysis && (
+                    <div className="p-3 border rounded-lg bg-card">
+                      <p className="text-sm font-medium mb-2">Dependency Analysis:</p>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="text-muted-foreground">Critical Path: </span>
+                          <span className="font-medium">{result.data.estimates.dependency_analysis.critical_path_length_days?.toFixed(1) || 'N/A'} days</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Dependency Impact: </span>
+                          <span className="font-medium">{result.data.estimates.dependency_analysis.dependency_impact_percent?.toFixed(1) || 'N/A'}%</span>
+                        </div>
+                      </div>
+                      {result.data.estimates.dependency_analysis.bottleneck_tasks && result.data.estimates.dependency_analysis.bottleneck_tasks.length > 0 && (
                         <div className="mt-2">
-                          <p className="text-sm font-medium">Key Risks:</p>
-                          <ul className="list-disc list-inside text-sm text-muted-foreground">
-                            {result.data.recommendations.key_risks.map((risk, idx) => (
-                              <li key={idx}>{risk}</li>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">Bottleneck Tasks:</p>
+                          <ul className="list-disc list-inside text-xs text-muted-foreground">
+                            {result.data.estimates.dependency_analysis.bottleneck_tasks.map((task, idx) => (
+                              <li key={idx}>{task}</li>
                             ))}
                           </ul>
                         </div>
                       )}
+                    </div>
+                  )}
+                  
+                  {/* Recommendations */}
+                  {result.data.recommendations && (
+                    <div className="p-3 border rounded-lg bg-card">
+                      <p className="text-sm font-medium mb-2">Recommendations:</p>
+                      <div className="space-y-2 text-sm">
+                        <div>
+                          <span className="text-muted-foreground">Suggested Deadline: </span>
+                          <span className="font-medium">{result.data.recommendations.suggested_deadline_days?.toFixed(1) || 'N/A'} days ({result.data.recommendations.suggested_deadline_weeks?.toFixed(1) || 'N/A'} weeks)</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Confidence Level: </span>
+                          <Badge variant={result.data.recommendations.confidence_level === 'high' ? 'default' : result.data.recommendations.confidence_level === 'medium' ? 'secondary' : 'outline'}>
+                            {result.data.recommendations.confidence_level || 'medium'}
+                          </Badge>
+                        </div>
+                        {result.data.recommendations.key_risks && result.data.recommendations.key_risks.length > 0 && (
+                          <div className="mt-2">
+                            <p className="text-xs font-medium text-muted-foreground mb-1">Key Risks:</p>
+                            <ul className="list-disc list-inside text-xs text-muted-foreground">
+                              {result.data.recommendations.key_risks.map((risk, idx) => (
+                                <li key={idx}>{risk}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
