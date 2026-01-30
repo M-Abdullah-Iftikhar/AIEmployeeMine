@@ -387,16 +387,13 @@ class InterviewSchedulingAgent:
             
             subject = f"Interview Invitation - {clean_job_title}"
             
-            # Generate slot selection URL with token
-            from django.urls import reverse
-            try:
-                # Get the domain from request or settings
-                domain = getattr(settings, 'SITE_DOMAIN', 'http://127.0.0.1:8000')
-                if not domain.startswith('http'):
-                    domain = f'http://{domain}'
-                slot_selection_url = f"{domain}/recruitment/interview/select/{interview.confirmation_token}/"
-            except:
-                slot_selection_url = f"http://127.0.0.1:8000/recruitment/interview/select/{interview.confirmation_token}/"
+            # Slot selection link: BACKEND URL (Django). Candidate clicks and lands on Django-served page to pick a slot.
+            # Set BACKEND_URL in .env to your Django server URL, e.g. http://localhost:8000 or https://api.yourapp.com
+            backend_base = (getattr(settings, 'BACKEND_URL', None) or '').strip().replace('\n', '').replace('\r', '')
+            if backend_base and not backend_base.startswith('http'):
+                backend_base = f'https://{backend_base}'
+            slot_selection_url = f"{backend_base}/recruitment/interview/select/{interview.confirmation_token}/" if backend_base else ''
+
             
             # Prepare email context (job_title for display in templates)
             context = {
@@ -948,15 +945,11 @@ class InterviewSchedulingAgent:
                 clean_job_title = clean_job_title[:47] + "..."
             subject = f"Reminder: Please Confirm Your Interview - {clean_job_title}"
             
-            # Generate slot selection URL with token
-            from django.urls import reverse
-            try:
-                domain = getattr(settings, 'SITE_DOMAIN', 'http://127.0.0.1:8000')
-                if not domain.startswith('http'):
-                    domain = f'http://{domain}'
-                slot_selection_url = f"{domain}/recruitment/interview/select/{interview.confirmation_token}/"
-            except:
-                slot_selection_url = f"http://127.0.0.1:8000/recruitment/interview/select/{interview.confirmation_token}/"
+            # Slot selection link: BACKEND URL (Django). Set BACKEND_URL in .env.
+            backend_base = (getattr(settings, 'BACKEND_URL', None) or '').strip().replace('\n', '').replace('\r', '')
+            if backend_base and not backend_base.startswith('http'):
+                backend_base = f'https://{backend_base}'
+            slot_selection_url = f"{backend_base}/recruitment/interview/select/{interview.confirmation_token}/" if backend_base else ''
             
             available_slots = json.loads(interview.available_slots_json) if interview.available_slots_json else []
             context = {

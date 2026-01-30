@@ -454,14 +454,14 @@ RECRUITER_EMAIL = os.getenv('RECRUITER_EMAIL', '').strip()
 # Base URL for email tracking (opens/clicks)
 # For local testing with ngrok, use your ngrok URL
 # For production, use your actual domain
-SITE_URL = os.getenv('SITE_URL', 'https://fiddly-uncouth-ryan.ngrok-free.dev')
+SITE_URL = os.getenv('SITE_URL')
 
 
 # --------------------
 # CORS Configuration
 # --------------------
-# Read CORS allowed origins from .env (comma-separated list)
-cors_origins_env = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:3000')
+# Read CORS allowed origins from .env (comma-separated list). Set CORS_ALLOWED_ORIGINS in .env for your frontend URL(s).
+cors_origins_env = os.getenv('CORS_ALLOWED_ORIGINS', '')
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in cors_origins_env.split(',') if origin.strip()]
 
 # Allow credentials (cookies, authorization headers, etc.)
@@ -496,8 +496,12 @@ CORS_ALLOW_METHODS = [
 STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY', 'sk_test_placeholder')
 STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY', 'pk_test_placeholder')
 STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET', 'whsec_placeholder')
-# Frontend base URL for Checkout success/cancel redirects (Vite dev default)
-FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000').rstrip('/')
+# Frontend base URL (React app) – for CORS, Stripe success/cancel redirects. Set FRONTEND_URL in .env.
+FRONTEND_URL = (os.getenv('FRONTEND_URL') or '').rstrip('/')
+# Backend base URL (Django server) – for links in emails (e.g. interview slot selection page). Set BACKEND_URL in .env (e.g. http://localhost:8000 or https://api.yourapp.com).
+BACKEND_URL = (os.getenv('BACKEND_URL') or '').rstrip('/')
+# Alias for code that still expects SITE_DOMAIN (e.g. task links in emails).
+SITE_DOMAIN = BACKEND_URL
 
 # --------------------
 # Celery Configuration (for Marketing Automation)
