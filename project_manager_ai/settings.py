@@ -295,10 +295,12 @@ INSTALLED_APPS = [
     'marketing_agent.apps.MarketingAgentConfig',  # Use app config for agent registration
     'Frontline_agent.apps.FrontlineAgentConfig',  # Frontline Agent app
     'api',  # API app
+    'whitenoise.runserver_nostatic',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+     'whitenoise.middleware.WhiteNoiseMiddleware'
     'corsheaders.middleware.CorsMiddleware',  # CORS middleware (should be early)
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -307,7 +309,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'recruitment_agent.middleware.AutoInterviewFollowupMiddleware',  # Auto follow-up email checking
-    'whitenoise.middleware.WhiteNoiseMiddleware',
+   ,
 ]
 
 ROOT_URLCONF = 'project_manager_ai.urls'
@@ -347,7 +349,7 @@ DATABASES = {
                 'extra_params': 'TrustServerCertificate=yes;Encrypt=Optional',  # Recomm                
             },
         'CONN_MAX_AGE': 0,
-        'TIME_ZONE': None,
+        'TIME_ZONE': 'UTC',
     }
 }
 
