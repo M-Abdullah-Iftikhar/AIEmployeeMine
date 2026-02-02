@@ -343,9 +343,9 @@ DATABASES = {
         'USER': os.getenv('DB_USER'),
         'PASSWORD': os.getenv('DB_PASSWORD'),
         'OPTIONS': {
-            'driver': 'ODBC Driver 17 for SQL Server',
-            'extra_params': 'TrustServerCertificate=yes',  # Trust server certificate
-        },
+                'driver': 'ODBC Driver 18 for SQL Server',  # ← Change from 17 to 18
+                'extra_params': 'TrustServerCertificate=yes;Encrypt=Optional',  # Recomm                
+            },
         'CONN_MAX_AGE': 0,
         'TIME_ZONE': None,
     }
