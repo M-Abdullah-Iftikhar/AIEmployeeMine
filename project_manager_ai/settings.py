@@ -376,6 +376,12 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 
+# This is the key line that's missing
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')  # or '/app/staticfiles' – both work
+
+# Optional but recommended for production (uses Whitenoise efficiently)
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
 # --------------------
 # Media files (for file uploads)
 # --------------------
