@@ -376,6 +376,7 @@ USE_TZ = True
 # --------------------
 # Static files
 # --------------------
+DATABASE_CONNECTION_POOLING = False
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 
