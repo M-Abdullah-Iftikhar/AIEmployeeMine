@@ -16,9 +16,11 @@ RUN apt-get update && \
     libcairo2-dev \
     pkg-config \
     python3-dev \
+    unixodbc \
+    unixodbc-dev \          # Needed to build pyodbc from source
     curl && \
     rm -rf /var/lib/apt/lists/*
-
+    
 # Copy requirements and install
 COPY requirements.txt .
 RUN pip install --upgrade pip
