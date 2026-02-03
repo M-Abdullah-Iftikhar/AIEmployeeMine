@@ -35,4 +35,4 @@ RUN python manage.py collectstatic --noinput --clear
 
 EXPOSE 8000
 
-CMD ["gunicorn", "project_manager_ai.wsgi:application", "--bind", "0.0.0.0:8000"]
+CMD ["gunicorn", "project_manager_ai.wsgi:application", "--bind", "0.0.0.0:8000", "--timeout", "120", "--workers", "1", "--log-level", "info"]
