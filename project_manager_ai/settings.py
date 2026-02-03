@@ -396,8 +396,12 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # --------------------
 # Default PK
 # --------------------
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField
+'
+if not DEBUG:
+    # Production memory optimizations
+    import gc
+    gc.set_threshold(700, 10, 10)  # more aggressive garbage collection
 
 # --------------------
 # Auth redirects
